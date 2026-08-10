@@ -455,7 +455,12 @@ function setFiltersFromUISettings() {
   )
     ? orderBy
     : wootConstants.SORT_BY_TYPE.LAST_ACTIVITY_AT_DESC;
-  activeAssigneeTab.value = wootConstants.ASSIGNEE_TYPE.ME;
+
+  if (uiSettings.value.open_waiting_conversations_by_default) {
+    activeAssigneeTab.value = wootConstants.ASSIGNEE_TYPE.WAITING;
+  } else {
+    activeAssigneeTab.value = wootConstants.ASSIGNEE_TYPE.ME;
+  }
 }
 
 function emitConversationLoaded() {
