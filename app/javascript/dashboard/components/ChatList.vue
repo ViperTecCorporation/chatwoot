@@ -72,7 +72,11 @@ const store = useStore();
 
 const resolveAttributesModalRef = ref(null);
 
-const activeAssigneeTab = ref(wootConstants.ASSIGNEE_TYPE.ME);
+const activeAssigneeTab = ref(
+  uiSettings.value.open_waiting_conversations_by_default
+    ? wootConstants.ASSIGNEE_TYPE.WAITING
+    : wootConstants.ASSIGNEE_TYPE.ME
+);
 const isFirstLoad = ref(true);
 const hasSetInitialTab = ref(false);
 const activeStatus = ref(wootConstants.STATUS_TYPE.OPEN);
