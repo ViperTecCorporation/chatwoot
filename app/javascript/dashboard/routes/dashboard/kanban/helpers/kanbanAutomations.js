@@ -51,7 +51,7 @@ const assignOnlineAgent = async (store, conversationId, pipeline) => {
       : onlineAgents;
   if (eligible.length > 0) {
     const agent = eligible[Math.floor(Math.random() * eligible.length)];
-    await store.dispatch('conversations/assignAgent', {
+    await store.dispatch('assignAgent', {
       conversationId,
       agentId: agent.id,
     });

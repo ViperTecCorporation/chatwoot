@@ -191,10 +191,10 @@ const fetchAllConversationsForKanban = async () => {
       perPage: 500,
     });
     if (data?.data?.payload) {
-      store.commit('conversations/SET_ALL_CONVERSATION', data.data.payload);
+      store.commit('SET_ALL_CONVERSATION', data.data.payload);
     }
   } catch {
-    store.dispatch('conversations/fetchAllConversations');
+    store.dispatch('fetchAllConversations');
   } finally {
     isLoadingConversations.value = false;
   }
@@ -393,7 +393,7 @@ const onCardDragChange = async (event, targetStage) => {
         activePipeline.value.automations?.auto_resolve_on_won_lost &&
         (targetStage.is_won || targetStage.is_lost)
       ) {
-        await store.dispatch('conversations/toggleStatus', {
+        await store.dispatch('toggleStatus', {
           conversationId: conversation.id,
           status: 'resolved',
         });
@@ -410,7 +410,7 @@ const onCardDragChange = async (event, targetStage) => {
 // Quick Resolve action inside the card
 const resolveConversation = async conversationId => {
   try {
-    await store.dispatch('conversations/toggleStatus', {
+    await store.dispatch('toggleStatus', {
       conversationId,
       status: 'resolved',
     });
@@ -534,7 +534,7 @@ const setSort = option => {
 };
 
 const handleAssign = ({ conversationId, agentId }) => {
-  store.dispatch('conversations/assignAgent', {
+  store.dispatch('assignAgent', {
     conversationId,
     agentId,
   });

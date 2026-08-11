@@ -302,7 +302,7 @@ const handleRemovePipeline = e => {
 const updatePriority = async p => {
   showPriorityPopover.value = false;
   try {
-    await store.dispatch('conversations/assignPriority', {
+    await store.dispatch('assignPriority', {
       conversationId: props.conversation.id,
       priority: p,
     });
@@ -334,7 +334,7 @@ const saveDate = async () => {
     delete currentCustomAttributes.due_date;
   }
   try {
-    await store.dispatch('conversations/updateCustomAttributes', {
+    await store.dispatch('updateCustomAttributes', {
       conversationId: props.conversation.id,
       customAttributes: currentCustomAttributes,
     });

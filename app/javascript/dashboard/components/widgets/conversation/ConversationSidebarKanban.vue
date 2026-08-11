@@ -126,7 +126,7 @@ const handleStageAutomations = async stage => {
 
   if (automations.auto_resolve_on_won_lost && (stage.is_won || stage.is_lost)) {
     try {
-      await store.dispatch('conversations/toggleStatus', {
+      await store.dispatch('toggleStatus', {
         conversationId: props.conversationId,
         status: 'resolved',
       });
@@ -151,7 +151,7 @@ const handleStageAutomations = async stage => {
       const agentToAssign =
         eligibleAgents[Math.floor(Math.random() * eligibleAgents.length)];
       try {
-        await store.dispatch('conversations/assignAgent', {
+        await store.dispatch('assignAgent', {
           conversationId: props.conversationId,
           agentId: agentToAssign.id,
         });
