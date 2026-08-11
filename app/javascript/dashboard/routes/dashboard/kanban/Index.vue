@@ -10,6 +10,7 @@ import Draggable from 'vuedraggable';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
 import Thumbnail from 'dashboard/components/widgets/Thumbnail.vue';
+import Spinner from 'dashboard/components-next/spinner/Spinner.vue';
 
 // Custom Kanban Components
 import KanbanCard from './components/KanbanCard.vue';
@@ -178,7 +179,7 @@ const pipelineStats = computed(() => {
   return { total, open, resolved, stageDistribution };
 });
 
-const isLoadingConversations = ref(false);
+const isLoadingConversations = ref(true);
 
 const fetchAllConversationsForKanban = async () => {
   isLoadingConversations.value = true;
@@ -259,6 +260,7 @@ const columnsCardsMap = ref({});
 
 const syncColumns = () => {
   if (!activePipeline.value) return;
+  if (isLoadingConversations.value && !allConversations.value.length) return;
 
   const newMap = {};
   activePipeline.value.stages.forEach(stage => {
@@ -975,7 +977,15 @@ const importOpenConversations = async () => {
       </div>
 
       <!-- Draggable Stage Board Columns -->
-      <main class="flex-grow flex gap-4 p-5 overflow-x-auto overflow-y-hidden">
+      <main
+        class="flex-grow flex gap-4 p-5 overflow-x-auto overflow-y-hidden relative"
+      >
+        <div
+          v-if="isLoadingConversations && !allConversations.length"
+          class="absolute inset-0 flex items-center justify-center bg-slate-950/20 backdrop-blur-sm z-50"
+        >
+          <Spinner size="40" class="text-n-brand" />
+        </div>
         <!-- Stage Column -->
         <div
           v-for="stage in activePipeline?.stages"
