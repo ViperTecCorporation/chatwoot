@@ -66,12 +66,12 @@ const loadKanbanConfig = async () => {
     fullConfig.value = config;
     configLabelId.value = labelId;
 
-    const queryPipelineId = Number(route.query.pipeline_id);
+    const pipelineId = Number(route.params.pipelineId || route.query.pipeline_id);
     if (
-      queryPipelineId &&
-      config.pipelines.some(p => p.id === queryPipelineId)
+      pipelineId &&
+      config.pipelines.some(p => p.id === pipelineId)
     ) {
-      activePipelineId.value = queryPipelineId;
+      activePipelineId.value = pipelineId;
     } else {
       activePipelineId.value = null;
     }
@@ -180,6 +180,7 @@ const pipelineStats = computed(() => {
 });
 
 const isLoadingConversations = ref(true);
+const isLoading = ref(true);
 
 const fetchAllConversationsForKanban = async () => {
   isLoadingConversations.value = true;
@@ -199,15 +200,31 @@ const fetchAllConversationsForKanban = async () => {
   }
 };
 
+const fetchKanbanData = async () => {
+  isLoading.value = true;
+  try {
+    // Read route parameters directly from the route before triggering fetch
+    const accountId = Number(route.params.accountId);
+    const pipelineId = Number(route.params.pipelineId || route.query.pipeline_id);
+
+    await Promise.all([
+      fetchAllConversationsForKanban(),
+      store.dispatch('labels/get'),
+      store.dispatch('inboxes/get'),
+      store.dispatch('agents/get'),
+      loadKanbanConfig(),
+    ]);
+  } catch (err) {
+    console.error('Failed to load Kanban data:', err);
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 let unsubscribeAutomations = null;
 
 onMounted(() => {
-  fetchAllConversationsForKanban();
-  store.dispatch('labels/get');
-  store.dispatch('inboxes/get');
-  store.dispatch('agents/get');
-
-  loadKanbanConfig();
+  fetchKanbanData();
   unsubscribeAutomations = KanbanAutomations.register(store);
 });
 
@@ -260,7 +277,7 @@ const columnsCardsMap = ref({});
 
 const syncColumns = () => {
   if (!activePipeline.value) return;
-  if (isLoadingConversations.value && !allConversations.value.length) return;
+  if (isLoading.value) return;
 
   const newMap = {};
   activePipeline.value.stages.forEach(stage => {
@@ -314,9 +331,9 @@ const syncColumns = () => {
 
 let skipColumnSync = false;
 
-// Sync lists when chats or active pipeline modifies
+// Sync lists when chats, active pipeline, or loading state modifies
 watch(
-  [filteredConversations, activePipeline],
+  [filteredConversations, activePipeline, isLoading],
   () => {
     if (skipColumnSync) return;
     syncColumns();
@@ -981,17 +998,18 @@ const importOpenConversations = async () => {
         class="flex-grow flex gap-4 p-5 overflow-x-auto overflow-y-hidden relative"
       >
         <div
-          v-if="isLoadingConversations && !allConversations.length"
+          v-if="isLoading"
           class="absolute inset-0 flex items-center justify-center bg-slate-950/20 backdrop-blur-sm z-50"
         >
           <Spinner size="40" class="text-n-brand" />
         </div>
         <!-- Stage Column -->
-        <div
-          v-for="stage in activePipeline?.stages"
-          :key="stage.id"
-          class="group/col flex flex-col flex-1 min-w-[280px] max-w-[550px] shrink-0 bg-slate-900/40 border border-slate-900 rounded-2xl overflow-hidden hover:border-slate-850 transition"
-        >
+        <template v-else>
+          <div
+            v-for="stage in activePipeline?.stages"
+            :key="stage.id"
+            class="group/col flex flex-col flex-1 min-w-[280px] max-w-[550px] shrink-0 bg-slate-900/40 border border-slate-900 rounded-2xl overflow-hidden hover:border-slate-850 transition"
+          >
           <!-- Column Header Info (Vibrant Full-Width Solid Colored Header as in Image 1) -->
           <div
             class="flex items-center justify-between px-4 py-3 shrink-0 text-white rounded-t-2xl border-b border-slate-950/40"
@@ -1104,6 +1122,7 @@ const importOpenConversations = async () => {
             </div>
           </div>
         </div>
+        </template>
       </main>
     </template>
 
