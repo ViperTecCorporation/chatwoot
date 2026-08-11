@@ -401,7 +401,7 @@ const openConversation = () => {
       name: 'inbox_conversation',
       params: {
         accountId: accountId,
-        conversationId: conversationId,
+        conversation_id: conversationId,
       },
     })
     .catch(() => {
