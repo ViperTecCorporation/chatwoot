@@ -253,6 +253,20 @@ describe ConversationFinder do
         result = conversation_finder.perform
         expect(result[:conversations].length).to be 25
       end
+
+      it 'respects custom per_page parameter' do
+        create_list(:conversation, 50, account: account, inbox: inbox, assignee: user_1)
+        params[:per_page] = 10
+        result = conversation_finder.perform
+        expect(result[:conversations].length).to be 10
+      end
+
+      it 'caps custom per_page parameter at 500' do
+        create_list(:conversation, 50, account: account, inbox: inbox, assignee: user_1)
+        params[:per_page] = 600
+        result = conversation_finder.perform
+        expect(result[:conversations].length).to be 50
+      end
     end
 
     context 'with perform_meta_only' do
