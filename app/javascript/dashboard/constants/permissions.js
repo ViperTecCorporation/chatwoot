@@ -38,10 +38,6 @@ export const ASSIGNEE_TYPE_TAB_PERMISSIONS = {
     count: 'waitingCount',
     permissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
   },
-  answered: {
-    count: 'answeredCount',
-    permissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
-  },
   unassigned: {
     count: 'unAssignedCount',
     permissions: [
@@ -49,6 +45,10 @@ export const ASSIGNEE_TYPE_TAB_PERMISSIONS = {
       MANAGE_ALL_CONVERSATION_PERMISSIONS,
       CONVERSATION_UNASSIGNED_PERMISSIONS,
     ],
+  },
+  answered: {
+    count: 'answeredCount',
+    permissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
   },
   all: {
     count: 'allCount',
