@@ -308,6 +308,7 @@ export default {
       this.fetchAllAttachmentsFromCurrentChat();
       this.fetchSuggestions();
       this.messageSentSinceOpened = false;
+      this.makeMessagesRead();
     },
   },
 

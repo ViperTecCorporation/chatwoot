@@ -12,7 +12,6 @@ class ConversationFinder
     'waiting_since_asc' => %w[sort_on_waiting_since asc],
     'waiting_since_desc' => %w[sort_on_waiting_since desc],
     'priority_desc_created_at_asc' => %w[sort_on_priority_created_at desc],
-    'unread' => %w[sort_on_unread desc],
 
     # To be removed in v3.5.0
     'latest' => %w[sort_on_last_activity_at desc],
@@ -41,7 +40,7 @@ class ConversationFinder
   def perform
     set_up
 
-    mine_count, assigned_count, unassigned_count, waiting_count, group_count, all_count, internal_count =
+    mine_count, assigned_count, unassigned_count, waiting_count, group_count, all_count, internal_count, answered_count =
       set_count_for_all_conversations
 
     filter_by_assignee_type
@@ -56,7 +55,8 @@ class ConversationFinder
         waiting_count: waiting_count,
         group_count: group_count,
         internal_count: internal_count,
-        all_count: all_count
+        all_count: all_count,
+        answered_count: answered_count
       }
     }
   end
@@ -64,7 +64,7 @@ class ConversationFinder
   def perform_meta_only
     set_up
 
-    mine_count, assigned_count, unassigned_count, waiting_count, group_count, all_count, internal_count =
+    mine_count, assigned_count, unassigned_count, waiting_count, group_count, all_count, internal_count, answered_count =
       set_count_for_all_conversations
 
     {
@@ -75,7 +75,8 @@ class ConversationFinder
         waiting_count: waiting_count,
         group_count: group_count,
         internal_count: internal_count,
-        all_count: all_count
+        all_count: all_count,
+        answered_count: answered_count
       }
     }
   end
@@ -134,15 +135,17 @@ class ConversationFinder
   def filter_by_assignee_type
     case @assignee_type
     when 'me'
-      @conversations = mine_conversations(@conversations)
+      @conversations = @conversations.assigned_to(current_user)
     when 'unassigned'
-      @conversations = unassigned_conversations(@conversations)
+      @conversations = @conversations.unassigned.non_group_conversations
     when 'waiting'
       @conversations = waiting_conversations
+    when 'answered'
+      @conversations = @conversations.where.not(first_reply_created_at: nil).where(waiting_since: nil)
     when 'groups'
       @conversations = @conversations.group_conversations
     when 'assigned'
-      @conversations = assigned_conversations(@conversations)
+      @conversations = @conversations.assigned
     when 'internal'
       @conversations = @conversations.joins(:inbox)
                                      .where(inboxes: { channel_type: 'Channel::Internal' })
@@ -234,32 +237,17 @@ class ConversationFinder
                       )
                     end
 
-    return legacy_count_for_all_conversations(count_scope, internal_scope, waiting_scope) if count_scope.limit_value || count_scope.offset_value || count_scope.eager_loading?
+    answered_scope = count_scope.where.not(first_reply_created_at: nil).where(waiting_since: nil)
 
-    waiting_filter = '(first_reply_created_at IS NULL OR waiting_since IS NOT NULL)'
-    waiting_filter = "#{waiting_filter} AND (assignee_id = #{current_user.id} OR assignee_id IS NULL)" unless @is_admin
-
-    counts = count_scope.unscope(:order).pick(
-      Arel.sql("COUNT(*) FILTER (WHERE #{mine_count_filter})"),
-      Arel.sql('COUNT(*) FILTER (WHERE assignee_id IS NOT NULL OR team_id IS NOT NULL)'),
-      Arel.sql('COUNT(*) FILTER (WHERE "conversations"."group" = FALSE AND assignee_id IS NULL AND team_id IS NULL)'),
-      Arel.sql("COUNT(*) FILTER (WHERE #{waiting_filter})"),
-      Arel.sql('COUNT(*) FILTER (WHERE "conversations"."group" = TRUE)'),
-      Arel.sql('COUNT(*)')
-    )
-    counts = counts || [0, 0, 0, 0, 0, 0]
-    counts + [internal_scope.count]
-  end
-
-  def legacy_count_for_all_conversations(count_scope, internal_scope, waiting_scope)
     [
-      mine_conversations(count_scope).count,
-      assigned_conversations(count_scope).count,
-      unassigned_conversations(count_scope).count,
+      count_scope.assigned_to(current_user).count,
+      count_scope.assigned.count,
+      count_scope.unassigned.non_group_conversations.count,
       waiting_scope.count,
       count_scope.group_conversations.count,
       count_scope.count,
-      internal_scope.count
+      internal_scope.count,
+      answered_scope.count
     ]
   end
 
@@ -270,29 +258,6 @@ class ConversationFinder
     conversations.where(assignee_id: current_user.id).or(
       conversations.where(assignee_id: nil)
     )
-  end
-
-  def mine_conversations(scope)
-    scope.where(assignee_id: current_user.id).or(scope.where(team_id: current_user_team_ids))
-  end
-
-  def assigned_conversations(scope)
-    scope.where.not(assignee_id: nil).or(scope.where.not(team_id: nil))
-  end
-
-  def unassigned_conversations(scope)
-    scope.where(assignee_id: nil, team_id: nil).non_group_conversations
-  end
-
-  def mine_count_filter
-    filter = "conversations.assignee_id = #{current_user.id}"
-    return filter if current_user_team_ids.empty?
-
-    "#{filter} OR conversations.team_id IN (#{current_user_team_ids.join(', ')})"
-  end
-
-  def current_user_team_ids
-    @current_user_team_ids ||= current_user.teams.where(account_id: current_account.id).pluck(:id)
   end
 
   def current_page
@@ -323,7 +288,9 @@ class ConversationFinder
     if params[:updated_within].present?
       @conversations.where('conversations.updated_at > ?', Time.zone.now - params[:updated_within].to_i.seconds)
     else
-      @conversations.page(current_page).per(ENV.fetch('CONVERSATION_RESULTS_PER_PAGE', '25').to_i)
+      limit = params[:per_page].present? ? params[:per_page].to_i : ENV.fetch('CONVERSATION_RESULTS_PER_PAGE', '25').to_i
+      limit = [limit, 500].min
+      @conversations.page(current_page).per(limit)
     end
   end
 end

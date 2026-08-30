@@ -41,7 +41,7 @@ import webphone from './webphone.json';
 import contentTemplates from './contentTemplates.json';
 import mfa from './mfa.json';
 import onboarding from './onboarding.json';
-import sessionLimit from './sessionLimit.json';
+import kanban from './kanban.json';
 import yearInReview from './yearInReview.json';
 
 export default {
@@ -71,6 +71,7 @@ export default {
   ...inboxMgmt,
   ...integrationApps,
   ...integrations,
+  ...kanban,
   ...labelsMgmt,
   ...login,
   ...macros,
@@ -88,6 +89,5 @@ export default {
   ...contentTemplates,
   ...mfa,
   ...onboarding,
-  ...sessionLimit,
   ...yearInReview,
 };

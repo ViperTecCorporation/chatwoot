@@ -9,7 +9,6 @@ import {
 
 import ChatListHeader from './ChatListHeader.vue';
 import ConversationList from './ConversationList.vue';
-import PushNotificationBanner from './PushNotificationBanner.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import ConversationFilter from 'next/filter/ConversationFilter.vue';
 import SaveCustomView from 'next/filter/SaveCustomView.vue';
@@ -51,10 +50,6 @@ import {
   filterItemsByPermission,
 } from 'dashboard/helper/permissionsHelper.js';
 import { matchesFilters } from '../store/modules/conversations/helpers/filterHelpers';
-import {
-  isConversationMine,
-  isConversationUnassigned,
-} from '../store/modules/conversations/helpers';
 import { CONVERSATION_EVENTS } from '../helper/AnalyticsHelper/events';
 import { ASSIGNEE_TYPE_TAB_PERMISSIONS } from 'dashboard/constants/permissions.js';
 
@@ -68,7 +63,7 @@ const props = defineProps({
   isOnExpandedLayout: { default: false, type: Boolean },
 });
 
-const emit = defineEmits(['conversationLoad', 'listContextChange']);
+const emit = defineEmits(['conversationLoad']);
 const { uiSettings } = useUISettings();
 const { t } = useI18n();
 const router = useRouter();
@@ -77,7 +72,13 @@ const store = useStore();
 
 const resolveAttributesModalRef = ref(null);
 
-const activeAssigneeTab = ref(wootConstants.ASSIGNEE_TYPE.ME);
+const activeAssigneeTab = ref(
+  uiSettings.value.open_waiting_conversations_by_default
+    ? wootConstants.ASSIGNEE_TYPE.WAITING
+    : wootConstants.ASSIGNEE_TYPE.ME
+);
+const isFirstLoad = ref(true);
+const hasSetInitialTab = ref(false);
 const activeStatus = ref(wootConstants.STATUS_TYPE.OPEN);
 const activeSortBy = ref(wootConstants.SORT_BY_TYPE.LAST_ACTIVITY_AT_DESC);
 const showAdvancedFilters = ref(false);
@@ -100,6 +101,8 @@ const chatLists = useMapGetter('getFilteredConversations');
 const mineChatsList = useMapGetter('getMineChats');
 const allChatList = useMapGetter('getAllStatusChats');
 const unAssignedChatsList = useMapGetter('getUnAssignedChats');
+const waitingChatsList = useMapGetter('getWaitingChats');
+const answeredChatsList = useMapGetter('getAnsweredChats');
 const groupChatsList = useMapGetter('getGroupChats');
 const participatingChatsList = useMapGetter('getParticipatingChats');
 const chatListLoading = useMapGetter('getChatListLoadingStatus');
@@ -109,7 +112,6 @@ const appliedFilters = useMapGetter('getAppliedConversationFiltersV2');
 const folders = useMapGetter('customViews/getConversationCustomViews');
 const agentList = useMapGetter('agents/getAgents');
 const teamsList = useMapGetter('teams/getTeams');
-const myTeamsList = useMapGetter('teams/getMyTeams');
 const inboxesList = useMapGetter('inboxes/getInboxes');
 const campaigns = useMapGetter('campaigns/getAllCampaigns');
 const labels = useMapGetter('labels/getLabels');
@@ -178,10 +180,6 @@ const hideUnassignedForAgents = computed(() => {
   );
 });
 
-const isWaitingConversationsDefaultEnabled = computed(() => {
-  return uiSettings.value.open_waiting_conversations_by_default ?? false;
-});
-
 const hasAppliedFilters = computed(() => {
   return appliedFilters.value.length !== 0;
 });
@@ -196,9 +194,6 @@ const activeFolder = computed(() => {
   }
   return undefined;
 });
-
-const getContact = useMapGetter('contacts/getContact');
-const folderContactId = useMapGetter('customViews/getActiveFolderContactId');
 
 const activeFolderName = computed(() => {
   return activeFolder.value?.name;
@@ -228,9 +223,6 @@ const assigneeTabItems = computed(() => {
     item => item.permissions
   )
     .filter(({ key }) => {
-      if (!isWaitingConversationsDefaultEnabled.value && key === 'waiting') {
-        return false;
-      }
       if (hideAllChatsForAgents.value && key === 'all') {
         return false;
       }
@@ -287,23 +279,6 @@ const activeAssigneeTabCount = computed(() => {
       ?.count || 0;
   return count;
 });
-
-const activeAssigneeTabItem = computed(() =>
-  assigneeTabItems.value.find(item => item.key === activeAssigneeTab.value)
-);
-
-watch(
-  () => [activeAssigneeTab.value, activeAssigneeTabItem.value?.count],
-  () => {
-    const {
-      key = '',
-      name = '',
-      count = 0,
-    } = activeAssigneeTabItem.value || {};
-    emit('listContextChange', { key, name, count });
-  },
-  { immediate: true }
-);
 
 const conversationListPagination = computed(() => {
   const conversationsPerPage = 25;
@@ -395,28 +370,14 @@ const pageTitle = computed(() => {
 
 function filterByAssigneeTab(conversations) {
   if (activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.ME) {
-    const currentUserTeamIds = myTeamsList.value.map(team => team.id);
-    return conversations.filter(conversation =>
-      isConversationMine(
-        conversation,
-        currentUser.value?.id,
-        currentUserTeamIds
-      )
+    return conversations.filter(
+      c => c.meta?.assignee?.id === currentUser.value?.id
     );
   }
   if (activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.UNASSIGNED) {
-    return conversations.filter(isConversationUnassigned);
+    return conversations.filter(c => !c.meta?.assignee && !c.group);
   }
   return [...conversations];
-}
-
-function sortByUnreadStatus(conversations) {
-  return [...conversations].sort((a, b) => {
-    const unreadCountDiff = (b.unread_count || 0) - (a.unread_count || 0);
-    if (unreadCountDiff !== 0) return unreadCountDiff;
-
-    return (b.last_activity_at || 0) - (a.last_activity_at || 0);
-  });
 }
 
 const conversationList = computed(() => {
@@ -436,12 +397,16 @@ const conversationList = computed(() => {
       activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.UNASSIGNED
     ) {
       localConversationList = [...unAssignedChatsList.value(filters)];
+    } else if (
+      activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.ANSWERED
+    ) {
+      localConversationList = [...answeredChatsList.value(filters)];
     } else if (activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.GROUPS) {
       localConversationList = [...groupChatsList.value(filters)];
     } else if (
       activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.WAITING
     ) {
-      localConversationList = [...allChatList.value(filters)];
+      localConversationList = [...waitingChatsList.value(filters)];
     } else if (
       activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.INTERNAL
     ) {
@@ -458,13 +423,6 @@ const conversationList = computed(() => {
     localConversationList = localConversationList.filter(conversation => {
       return matchesFilters(conversation, payload);
     });
-  }
-
-  if (
-    !hasAppliedFiltersOrActiveFolders.value &&
-    activeSortBy.value === wootConstants.SORT_BY_TYPE.UNREAD
-  ) {
-    localConversationList = sortByUnreadStatus(localConversationList);
   }
 
   return localConversationList;
@@ -501,7 +459,8 @@ function setFiltersFromUISettings() {
   )
     ? orderBy
     : wootConstants.SORT_BY_TYPE.LAST_ACTIVITY_AT_DESC;
-  if (isWaitingConversationsDefaultEnabled.value && !props.conversationType) {
+
+  if (uiSettings.value.open_waiting_conversations_by_default) {
     activeAssigneeTab.value = wootConstants.ASSIGNEE_TYPE.WAITING;
   } else {
     activeAssigneeTab.value = wootConstants.ASSIGNEE_TYPE.ME;
@@ -594,7 +553,6 @@ function setParamsForEditFolderModal() {
     inboxes: inboxesList.value,
     labels: labels.value,
     campaigns: campaigns.value,
-    contacts: [getContact.value(folderContactId.value)],
     languages: languages,
     countries: countries,
     priority: [
@@ -693,6 +651,8 @@ function fetchConversations() {
 }
 
 function resetAndFetchData() {
+  isFirstLoad.value = true;
+  hasSetInitialTab.value = false;
   appliedFilter.value = [];
   resetBulkActions();
   store.dispatch('conversationPage/reset');
@@ -728,10 +688,16 @@ function updateAssigneeTab(selectedTab) {
     resetBulkActions();
     emitter.emit('clearSearchInput');
     activeAssigneeTab.value = selectedTab;
-    if (!currentPage.value) {
-      fetchConversations();
-    }
+    store.dispatch('conversationPage/reset');
+    store.dispatch('emptyAllConversations');
+    fetchConversations();
   }
+}
+
+function onTabChange(selectedTab) {
+  hasSetInitialTab.value = true;
+  isFirstLoad.value = false;
+  updateAssigneeTab(selectedTab);
 }
 
 function onBasicFilterChange(value, type) {
@@ -926,10 +892,7 @@ useEmitter('fetch_conversation_stats', () => {
   store.dispatch('conversationStats/get', conversationFilters.value);
 });
 
-onMounted(async () => {
-  if (!teamsList.value.length) {
-    await store.dispatch('teams/get');
-  }
+onMounted(() => {
   setFiltersFromUISettings();
   store.dispatch('setChatListFilters', conversationFilters.value);
   store.dispatch('setChatStatusFilter', activeStatus.value);
@@ -1004,6 +967,32 @@ watch(conversationFilters, (newVal, oldVal) => {
     store.dispatch('updateChatListFilters', newVal);
   }
 });
+
+watch(
+  () => route.params,
+  () => {
+    isFirstLoad.value = true;
+  },
+  { deep: true }
+);
+
+watch(
+  () => conversationStats.value.updatedOn,
+  () => {
+    if (!hasSetInitialTab.value && conversationStats.value.updatedOn) {
+      hasSetInitialTab.value = true;
+      isFirstLoad.value = false;
+      if (
+        uiSettings.value.open_waiting_conversations_by_default &&
+        conversationStats.value.waitingCount > 0
+      ) {
+        updateAssigneeTab(wootConstants.ASSIGNEE_TYPE.WAITING);
+      } else {
+        updateAssigneeTab(wootConstants.ASSIGNEE_TYPE.ME);
+      }
+    }
+  }
+);
 </script>
 
 <template>
@@ -1057,10 +1046,8 @@ watch(conversationFilters, (newVal, oldVal) => {
       :items="assigneeTabItems"
       :active-tab="activeAssigneeTab"
       is-compact
-      @chat-tab-change="updateAssigneeTab"
+      @chat-tab-change="onTabChange"
     />
-
-    <PushNotificationBanner :account-id="currentAccountId" />
 
     <p
       v-if="!chatListLoading && !conversationList.length"

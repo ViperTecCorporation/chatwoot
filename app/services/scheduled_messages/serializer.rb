@@ -9,7 +9,7 @@ class ScheduledMessages::Serializer
     base_attributes.merge(
       conversation_id: @message.conversation.display_id,
       target_conversation_id: @message.target_conversation&.display_id,
-      label: @message.label.slice(:id, :title, :color),
+      label: @message.label&.slice(:id, :title, :color),
       contact: contact,
       inbox: @message.inbox.slice(:id, :name),
       messages: serialized_items,
@@ -33,7 +33,7 @@ class ScheduledMessages::Serializer
   def base_attributes
     @message.as_json(
       only: [:id, :scheduled_at, :status, :reason, :content, :content_type, :content_attributes,
-             :attachment_blob_ids, :error_message]
+             :attachment_blob_ids, :error_message, :is_task]
     )
   end
 
