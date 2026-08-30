@@ -264,7 +264,7 @@ const urgencyMeta = computed(() => {
   };
 });
 
-import { getChannelMeta } from 'dashboard/helper/channelMeta';
+import { getChannelMeta } from 'dashboard/helper/channelMeta.js';
 const channelMeta = computed(() => getChannelMeta(channelType.value));
 
 // Last message content

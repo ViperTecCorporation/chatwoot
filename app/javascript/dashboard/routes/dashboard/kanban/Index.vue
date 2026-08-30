@@ -153,7 +153,7 @@ const getPipelineUniqueInboxes = pipeline => {
   return Array.from(inboxesMap.values());
 };
 
-import { getChannelMeta } from 'dashboard/helper/channelMeta';
+import { getChannelMeta } from 'dashboard/helper/channelMeta.js';
 import {
   KanbanAutomations,
   triggerStageTypebot,
