@@ -90,6 +90,7 @@ const getters = {
     );
 
     return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
       const shouldFilter = applyPageFilters(conversation, activeFilters);
       const isChatMine =
         isConversationMine(conversation, currentUserID, currentUserTeamIds) &&
@@ -138,6 +139,7 @@ const getters = {
   },
   getWaitingChats: _state => activeFilters => {
     return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
       const isWaiting = !!conversation.waiting_since;
       const shouldFilter = applyPageFilters(conversation, activeFilters);
       return isWaiting && shouldFilter;
@@ -152,6 +154,7 @@ const getters = {
     const userRole = getUserRole(currentUser, currentAccountId);
 
     return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
       const isAnswered =
         !!conversation.first_reply_created_at && !conversation.waiting_since;
       const shouldFilter = applyPageFilters(conversation, activeFilters);
@@ -174,6 +177,7 @@ const getters = {
     const userRole = getUserRole(currentUser, currentAccountId);
 
     return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
       const shouldFilter = applyPageFilters(conversation, activeFilters);
       const allowedForRole = applyRoleFilter(
         conversation,

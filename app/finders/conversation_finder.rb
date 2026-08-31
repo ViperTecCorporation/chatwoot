@@ -135,20 +135,22 @@ class ConversationFinder
   def filter_by_assignee_type
     case @assignee_type
     when 'me'
-      @conversations = @conversations.assigned_to(current_user)
+      @conversations = @conversations.non_group_conversations.assigned_to(current_user)
     when 'unassigned'
       @conversations = @conversations.unassigned.non_group_conversations
     when 'waiting'
       @conversations = waiting_conversations
     when 'answered'
-      @conversations = @conversations.where.not(first_reply_created_at: nil).where(waiting_since: nil)
+      @conversations = @conversations.non_group_conversations.where.not(first_reply_created_at: nil).where(waiting_since: nil)
     when 'groups'
       @conversations = @conversations.group_conversations
     when 'assigned'
-      @conversations = @conversations.assigned
+      @conversations = @conversations.non_group_conversations.assigned
     when 'internal'
-      @conversations = @conversations.joins(:inbox)
+      @conversations = @conversations.non_group_conversations.joins(:inbox)
                                      .where(inboxes: { channel_type: 'Channel::Internal' })
+    else
+      @conversations = @conversations.non_group_conversations
     end
     @conversations
   end
@@ -221,14 +223,16 @@ class ConversationFinder
     count_scope = @conversations
     count_scope = count_scope.where(status: status_filter) if status_filter
 
+    non_group_scope = count_scope.non_group_conversations
+
     internal_scope = @conversations.joins(:inbox).where(inboxes: { channel_type: 'Channel::Internal' })
     internal_scope = internal_scope.where(status: status_filter) if status_filter
 
     unless params[:conversation_type] == 'internal' || @assignee_type == 'internal'
-      count_scope = count_scope.joins(:inbox).where.not(inboxes: { channel_type: 'Channel::Internal' })
+      non_group_scope = non_group_scope.joins(:inbox).where.not(inboxes: { channel_type: 'Channel::Internal' })
     end
 
-    waiting_scope = count_scope.unattended
+    waiting_scope = non_group_scope.unattended
     waiting_scope = if @is_admin
                       waiting_scope
                     else
@@ -237,22 +241,22 @@ class ConversationFinder
                       )
                     end
 
-    answered_scope = count_scope.where.not(first_reply_created_at: nil).where(waiting_since: nil)
+    answered_scope = non_group_scope.where.not(first_reply_created_at: nil).where(waiting_since: nil)
 
     [
-      count_scope.assigned_to(current_user).count,
-      count_scope.assigned.count,
+      non_group_scope.assigned_to(current_user).count,
+      non_group_scope.assigned.count,
       count_scope.unassigned.non_group_conversations.count,
       waiting_scope.count,
       count_scope.group_conversations.count,
-      count_scope.count,
+      non_group_scope.count,
       internal_scope.count,
       answered_scope.count
     ]
   end
 
   def waiting_conversations
-    conversations = @conversations.unattended
+    conversations = @conversations.non_group_conversations.unattended
     return conversations if @is_admin
 
     conversations.where(assignee_id: current_user.id).or(
