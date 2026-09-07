@@ -27,7 +27,9 @@
       "me": "Minhas",
       "unassigned": "Não atribuídas",
       "groups": "Grupos",
-      "internal": "Chat interno"
+      "internal": "Chat interno",
+      "mention": "Menções",
+      "participating": "Participante"
     },
     "CHAT_STATUS_FILTER_ITEMS": {
       "open": {

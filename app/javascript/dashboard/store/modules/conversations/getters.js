@@ -145,6 +145,17 @@ const getters = {
       return applyPageFilters(conversation, activeFilters);
     });
   },
+  getMentionedChats: (_state, _, __, rootGetters) => activeFilters => {
+    const currentUserId = rootGetters.getCurrentUser?.id;
+    return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
+      const hasMention = conversation.muted === false && 
+        conversation.unread_count > 0 &&
+        conversation.last_non_activity_message?.message_type === 1;
+      const shouldFilter = applyPageFilters(conversation, activeFilters);
+      return hasMention && shouldFilter;
+    });
+  },
   getWaitingChats: _state => activeFilters => {
     return _state.allConversations.filter(conversation => {
       if (conversation.group) return false;

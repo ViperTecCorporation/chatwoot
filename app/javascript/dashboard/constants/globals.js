@@ -8,6 +8,8 @@ export default {
     ALL: 'all',
     GROUPS: 'groups',
     INTERNAL: 'internal',
+    MENTION: 'mention',
+    PARTICIPATING: 'participating',
   },
   STATUS_TYPE: {
     OPEN: 'open',
@@ -41,6 +43,7 @@ export default {
   LAYOUT_TYPES: {
     CONDENSED: 'condensed',
     EXPANDED: 'expanded',
+    HORIZONTAL_TOP: 'horizontal_top',
   },
   DOCS_URL: 'https://www.chatwoot.com/docs/product/',
   HELP_CENTER_DOCS_URL:

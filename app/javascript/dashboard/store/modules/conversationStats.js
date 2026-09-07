@@ -10,6 +10,8 @@ const state = {
   allCount: 0,
   groupCount: 0,
   internalCount: 0,
+  mentionCount: 0,
+  participatingCount: 0,
 };
 
 export const getters = {
@@ -77,6 +79,8 @@ export const mutations = {
       group_count: groupCount,
       internal_count: internalCount,
       answered_count: answeredCount,
+      mention_count: mentionCount,
+      participating_count: participatingCount,
       requested_assignee_type: requestedAssigneeType,
       requested_conversation_type: requestedConversationType,
       requested_inbox_channel_type: requestedInboxChannelType,
@@ -104,6 +108,8 @@ export const mutations = {
     $state.answeredCount = answeredCount || 0;
     $state.groupCount = groupCount || 0;
     $state.internalCount = nextInternalCount || 0;
+    $state.mentionCount = mentionCount || 0;
+    $state.participatingCount = participatingCount || 0;
     $state.updatedOn = new Date();
   },
 };

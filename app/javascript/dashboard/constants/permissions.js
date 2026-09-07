@@ -50,6 +50,14 @@ export const ASSIGNEE_TYPE_TAB_PERMISSIONS = {
     count: 'answeredCount',
     permissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
   },
+  mention: {
+    count: 'mentionCount',
+    permissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
+  },
+  participating: {
+    count: 'participatingCount',
+    permissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
+  },
   all: {
     count: 'allCount',
     permissions: [
