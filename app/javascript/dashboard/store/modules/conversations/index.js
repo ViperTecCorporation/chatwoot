@@ -1,11 +1,8 @@
 import types from '../../mutation-types';
 import getters, { getSelectedChatConversation } from './getters';
 import actions from './actions';
-import {
-  findPendingMessageIndex,
-  sortMessagesChronologically,
-} from './helpers';
-import { MESSAGE_STATUS } from 'shared/constants/messages';
+import { findPendingMessageIndex } from './helpers';
+import { MESSAGE_STATUS, MESSAGE_TYPE } from 'shared/constants/messages';
 import wootConstants from 'dashboard/constants/globals';
 import { BUS_EVENTS } from '../../../../shared/constants/busEvents';
 import { emitter } from 'shared/helpers/mitt';
@@ -27,6 +24,7 @@ const state = {
   syncConversationsMessages: {},
   conversationFilters: {},
   copilotAssistant: {},
+  agentActivityTimestamps: {},
 };
 
 const getConversationById = _state => conversationId => {
@@ -89,7 +87,7 @@ export const mutations = {
   [types.SET_PREVIOUS_CONVERSATIONS](_state, { id, data }) {
     if (data.length) {
       const [chat] = _state.allConversations.filter(c => c.id === id);
-      chat.messages = sortMessagesChronologically([...data, ...chat.messages]);
+      chat.messages.unshift(...data);
     }
   },
   [types.SET_ALL_ATTACHMENTS](_state, { id, data }) {
@@ -115,14 +113,18 @@ export const mutations = {
   [types.SET_CURRENT_CHAT_WINDOW](_state, activeChat) {
     if (activeChat) {
       _state.selectedChatId = activeChat.id;
+      _state.agentActivityTimestamps[activeChat.id] = Date.now();
     }
   },
 
-  [types.ASSIGN_AGENT](_state, { conversationId, assignee, assigneeType }) {
+  [types.SET_AGENT_ACTIVITY_TIMESTAMP](_state, { conversationId }) {
+    _state.agentActivityTimestamps[conversationId] = Date.now();
+  },
+
+  [types.ASSIGN_AGENT](_state, { conversationId, assignee }) {
     const chat = getConversationById(_state)(conversationId);
     if (chat) {
       chat.meta.assignee = assignee;
-      chat.meta.assignee_type = assigneeType;
     }
   },
 
@@ -215,8 +217,7 @@ export const mutations = {
       _state.attachmentsMeta[id] = {
         ...meta,
         totalCount:
-          (meta.totalCount || existingAttachments.length) +
-          attachmentsToAdd.length,
+          (meta.totalCount || existingAttachments.length) + attachmentsToAdd.length,
       };
     }
   },
@@ -243,8 +244,7 @@ export const mutations = {
 
     const meta = _state.attachmentsMeta[id];
     if (meta) {
-      const removedCount =
-        existingAttachments.length - filteredAttachments.length;
+      const removedCount = existingAttachments.length - filteredAttachments.length;
       const nextTotal =
         (meta.totalCount || existingAttachments.length) - removedCount;
       _state.attachmentsMeta[id] = {
@@ -301,17 +301,28 @@ export const mutations = {
       chat.messages[pendingMessageIndex] = message;
     } else {
       chat.messages.push(message);
-      chat.timestamp = Math.max(chat.timestamp || 0, message.created_at || 0);
+      chat.timestamp = message.created_at;
+      chat.last_activity_at = message.created_at;
       const { conversation: { unread_count: unreadCount = 0 } = {} } = message;
       chat.unread_count = unreadCount;
+      if (message.message_type !== MESSAGE_TYPE.ACTIVITY) {
+        chat.last_non_activity_message = message;
+      }
       if (selectedChatId === conversationId) {
         emitter.emit(BUS_EVENTS.SCROLL_TO_MESSAGE);
       }
     }
-    chat.messages = sortMessagesChronologically(chat.messages);
   },
 
   [types.ADD_CONVERSATION](_state, conversation) {
+    if (
+      !conversation ||
+      !conversation.id ||
+      conversation.id === 'null' ||
+      conversation.id === 'undefined'
+    ) {
+      return;
+    }
     const exists = _state.allConversations.some(c => c.id === conversation.id);
     if (!exists) {
       _state.allConversations.push(conversation);
@@ -325,6 +336,14 @@ export const mutations = {
   },
 
   [types.UPDATE_CONVERSATION](_state, conversation) {
+    if (
+      !conversation ||
+      !conversation.id ||
+      conversation.id === 'null' ||
+      conversation.id === 'undefined'
+    ) {
+      return;
+    }
     const { allConversations } = _state;
     const index = allConversations.findIndex(c => c.id === conversation.id);
 
@@ -337,7 +356,12 @@ export const mutations = {
       }
 
       const { messages, ...updates } = conversation;
-      allConversations[index] = { ...selectedConversation, ...updates };
+      const updated = { ...selectedConversation, ...updates };
+      _state.allConversations = [
+        ..._state.allConversations.slice(0, index),
+        updated,
+        ..._state.allConversations.slice(index + 1),
+      ];
       if (_state.selectedChatId === conversation.id) {
         emitter.emit(BUS_EVENTS.SCROLL_TO_MESSAGE);
       }

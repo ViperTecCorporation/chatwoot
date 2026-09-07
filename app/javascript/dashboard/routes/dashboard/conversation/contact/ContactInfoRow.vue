@@ -4,6 +4,11 @@ import EmojiOrIcon from 'shared/components/EmojiOrIcon.vue';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 import InlineInput from 'dashboard/components-next/inline-input/InlineInput.vue';
+import { BUS_EVENTS } from 'shared/constants/busEvents';
+import { emitter } from 'shared/helpers/mitt';
+import { useMapGetter } from 'dashboard/composables/store';
+import { INBOX_TYPES } from 'dashboard/helper/inbox';
+import { computed } from 'vue';
 
 export default {
   components: {
@@ -42,6 +47,15 @@ export default {
     },
   },
   emits: ['update'],
+  setup() {
+    const currentChat = useMapGetter('getSelectedChat');
+    const insertIntoRichEditor = computed(() => {
+      const inbox = currentChat.value?.meta?.channel;
+      return [INBOX_TYPES.WEB, INBOX_TYPES.EMAIL].includes(inbox);
+    });
+
+    return { currentChat, insertIntoRichEditor };
+  },
   data() {
     return {
       isEditing: false,
@@ -72,6 +86,26 @@ export default {
     },
     cancelEdit() {
       this.isEditing = false;
+    },
+    handleUseValue() {
+      if (!this.value) return;
+      const conversationId = this.currentChat?.id;
+      const replyType =
+        this.$store.getters['draftMessages/getReplyEditorMode'] || 'reply';
+      const draftKey = `draft-${conversationId}-${replyType}`;
+      const draftText =
+        this.$store.getters['draftMessages/get'](draftKey) || '';
+
+      let valueToInsert = String(this.value);
+      if (draftText && !/\s$/.test(draftText)) {
+        valueToInsert = ` ${valueToInsert}`;
+      }
+
+      if (this.insertIntoRichEditor) {
+        emitter.emit(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, valueToInsert);
+      } else {
+        emitter.emit(BUS_EVENTS.INSERT_INTO_NORMAL_EDITOR, valueToInsert);
+      }
     },
   },
 };
@@ -130,6 +164,16 @@ export default {
         @click="onCopy"
       />
       <NextButton
+        v-if="currentChat && value"
+        v-tooltip.top="$t('CUSTOM_ATTRIBUTES.ACTIONS.USE')"
+        ghost
+        xs
+        blue
+        class="ltr:-ml-1 rtl:-mr-1"
+        icon="i-lucide-arrow-left-to-line"
+        @click.prevent="handleUseValue"
+      />
+      <NextButton
         v-if="editable"
         ghost
         xs
@@ -156,6 +200,16 @@ export default {
       <span v-else class="text-sm text-n-slate-11">
         {{ $t('CONTACT_PANEL.NOT_AVAILABLE') }}
       </span>
+      <NextButton
+        v-if="currentChat && value"
+        v-tooltip.top="$t('CUSTOM_ATTRIBUTES.ACTIONS.USE')"
+        ghost
+        xs
+        blue
+        class="ltr:-ml-1 rtl:-mr-1"
+        icon="i-lucide-arrow-left-to-line"
+        @click.prevent="handleUseValue"
+      />
       <NextButton
         v-if="editable"
         ghost

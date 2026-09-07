@@ -15,10 +15,7 @@ import { getAllowedFileTypesByChannel } from '@chatwoot/utils';
 import scheduledMessagesApi from 'dashboard/api/scheduledMessages';
 import SearchAPI from 'dashboard/api/search';
 import { useAlert } from 'dashboard/composables';
-import {
-  getDirectUploadUrl,
-  setDirectUploadAuthHeaders,
-} from 'dashboard/helper/directUploadsHelper';
+import { setDirectUploadAuthHeaders } from 'dashboard/helper/directUploadsHelper';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
@@ -106,6 +103,7 @@ const editForm = reactive({
   labelId: '',
   reason: '',
   senderId: '',
+  isTask: false,
   messages: [],
 });
 
@@ -258,7 +256,14 @@ const weekLabel = computed(() => {
 
 const columns = computed(() => {
   const map = new Map();
-  dayItems.value.forEach(item => map.set(item.label.id, item.label));
+  dayItems.value.forEach(item => {
+    const label = item.label || {
+      id: 'none',
+      title: 'Sem etiqueta',
+      color: '#6366f1',
+    };
+    map.set(label.id, label);
+  });
   return [...map.values()];
 });
 
@@ -417,9 +422,10 @@ const moveWeek = offset => {
 const itemsAt = (time, labelId) =>
   dayItems.value.filter(item => {
     const date = new Date(item.scheduled_at);
+    const itemLabelId = item.label?.id || 'none';
     return (
       `${pad(date.getHours())}:${pad(date.getMinutes())}` === time &&
-      item.label.id === labelId
+      itemLabelId === labelId
     );
   });
 
@@ -452,15 +458,17 @@ const resetEditForm = (item, retry = false) => {
   const scheduledDate =
     retry || currentSchedule <= new Date() ? minimumDate : currentSchedule;
   editForm.scheduledAt = toDatetimeLocal(scheduledDate);
-  editForm.labelId = item.label.id;
+  editForm.labelId = item.label?.id || '';
   editForm.reason = item.reason || '';
+  editForm.isTask = item.is_task || false;
   editForm.senderId = item.sender.id;
+  const taskContent = item.is_task ? item.reason || item.content || '' : null;
   editForm.messages = (
     item.messages?.length
       ? item.messages
       : [
           {
-            content: item.content || '',
+            content: taskContent || item.content || '',
             content_type: item.content_type || 'text',
             content_attributes: item.content_attributes || {},
             voice_message: false,
@@ -469,7 +477,7 @@ const resetEditForm = (item, retry = false) => {
         ]
   ).map(message => ({
     id: message.id,
-    content: message.content || '',
+    content: message.content || (item.is_task ? item.reason || '' : ''),
     content_type: message.content_type || 'text',
     content_attributes: message.content_attributes || {},
     voice_message: Boolean(message.voice_message),
@@ -506,6 +514,7 @@ const openCreate = async () => {
   editForm.scheduledAt = toDatetimeLocal(new Date(Date.now() + 300000));
   editForm.labelId = labels.value[0]?.id || '';
   editForm.reason = '';
+  editForm.isTask = false;
   editForm.senderId = currentUser.value.id;
   editForm.messages = [
     {
@@ -548,15 +557,19 @@ const selectConversation = ({ conversation }) => {
 };
 
 const saveEdit = async () => {
-  if (!editForm.scheduledAt || !editForm.labelId) return;
+  if (!editForm.scheduledAt) return;
   if (editMode.value === 'create' && !selectedConversation.value) return;
   isSaving.value = true;
   try {
+    const firstMessageContent = editForm.messages[0]?.content || '';
     const scheduledMessage = {
       scheduled_at: new Date(editForm.scheduledAt).toISOString(),
       label_id: editForm.labelId,
-      reason: editForm.reason,
+      reason: editForm.isTask
+        ? editForm.reason || firstMessageContent
+        : editForm.reason,
       sender_id: editForm.senderId,
+      is_task: editForm.isTask,
       messages: editForm.messages.map(message => ({
         content: message.content,
         content_type: message.content_type || 'text',
@@ -622,12 +635,27 @@ const remove = async () => {
   }
 };
 
+const completeTask = async item => {
+  isSaving.value = true;
+  try {
+    await scheduledMessagesApi.delete(item.id);
+    useAlert('Tarefa concluída');
+    await refresh();
+  } catch (error) {
+    useAlert(
+      error?.response?.data?.error || 'Não foi possível concluir a tarefa'
+    );
+  } finally {
+    isSaving.value = false;
+  }
+};
+
 const uploadAttachment = ({ file, index, voiceMessage }) => {
   if (!file?.file) return;
   isUploading.value = true;
   const upload = new DirectUpload(
     file.file,
-    getDirectUploadUrl('/rails/active_storage/direct_uploads'),
+    '/rails/active_storage/direct_uploads',
     {
       directUploadWillCreateBlobWithXHR: xhr => {
         if (currentUser.value.access_token) {
@@ -1013,6 +1041,7 @@ onBeforeUnmount(() => {
                   @edit="openEdit($event)"
                   @retry="openEdit($event, true)"
                   @delete="askDelete"
+                  @complete="completeTask"
                 />
               </div>
             </template>
@@ -1070,6 +1099,7 @@ onBeforeUnmount(() => {
                   @edit="openEdit($event)"
                   @retry="openEdit($event, true)"
                   @delete="askDelete"
+                  @complete="completeTask"
                 />
               </div>
             </div>
@@ -1105,9 +1135,8 @@ onBeforeUnmount(() => {
       :is-loading="isSaving"
       :disable-confirm-button="
         !editForm.scheduledAt ||
-        !editForm.labelId ||
         isUploading ||
-        !messagesValid ||
+        (!editForm.isTask && !messagesValid) ||
         (editMode === 'create' && !selectedConversation)
       "
       @confirm="saveEdit"
@@ -1200,6 +1229,20 @@ onBeforeUnmount(() => {
             class="!w-full [&_select]:w-full"
           />
         </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <input
+          id="is-task-checkbox"
+          v-model="editForm.isTask"
+          type="checkbox"
+          class="w-4 h-4 rounded text-n-brand border-n-weak"
+        />
+        <label
+          for="is-task-checkbox"
+          class="text-sm text-n-slate-11 cursor-pointer"
+        >
+          Apenas tarefa (não enviar mensagem)
+        </label>
       </div>
       <TextArea
         v-model="editForm.reason"

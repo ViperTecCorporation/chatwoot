@@ -95,6 +95,7 @@ const getters = {
       : [];
 
     return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
       const shouldFilter = applyPageFilters(conversation, activeFilters);
       const isChatMine =
         isConversationMine(conversation, currentUserID, currentUserTeamIds) &&
@@ -144,6 +145,48 @@ const getters = {
       return applyPageFilters(conversation, activeFilters);
     });
   },
+  getMentionedChats: (_state, _, __, rootGetters) => activeFilters => {
+    const currentUserId = rootGetters.getCurrentUser?.id;
+    return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
+      const hasMention = conversation.muted === false && 
+        conversation.unread_count > 0 &&
+        conversation.last_non_activity_message?.message_type === 1;
+      const shouldFilter = applyPageFilters(conversation, activeFilters);
+      return hasMention && shouldFilter;
+    });
+  },
+  getWaitingChats: _state => activeFilters => {
+    return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
+      const isWaiting = !!conversation.waiting_since;
+      const shouldFilter = applyPageFilters(conversation, activeFilters);
+      return isWaiting && shouldFilter;
+    });
+  },
+  getAnsweredChats: (_state, _, __, rootGetters) => activeFilters => {
+    const currentUser = rootGetters.getCurrentUser;
+    const currentUserId = rootGetters.getCurrentUser.id;
+    const currentAccountId = rootGetters.getCurrentAccountId;
+
+    const permissions = getUserPermissions(currentUser, currentAccountId);
+    const userRole = getUserRole(currentUser, currentAccountId);
+
+    return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
+      const isAnswered =
+        !!conversation.first_reply_created_at && !conversation.waiting_since;
+      const shouldFilter = applyPageFilters(conversation, activeFilters);
+      const allowedForRole = applyRoleFilter(
+        conversation,
+        userRole,
+        permissions,
+        currentUserId
+      );
+
+      return isAnswered && shouldFilter && allowedForRole;
+    });
+  },
   getAllStatusChats: (_state, _, __, rootGetters) => activeFilters => {
     const currentUser = rootGetters.getCurrentUser;
     const currentUserId = rootGetters.getCurrentUser.id;
@@ -153,6 +196,7 @@ const getters = {
     const userRole = getUserRole(currentUser, currentAccountId);
 
     return _state.allConversations.filter(conversation => {
+      if (conversation.group) return false;
       const shouldFilter = applyPageFilters(conversation, activeFilters);
       const allowedForRole = applyRoleFilter(
         conversation,

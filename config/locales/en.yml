@@ -284,6 +284,7 @@ en:
       sla_missed_first_response: 'SLA target first response missed for conversation (#%{display_id})'
       sla_missed_next_response: 'SLA target next response missed for conversation (#%{display_id})'
       sla_missed_resolution: 'SLA target resolution missed for conversation (#%{display_id})'
+      scheduled_task_due: 'Scheduled task due for conversation (#%{display_id})'
     attachment: 'Attachment'
     no_content: 'No content'
   conversations:
@@ -425,6 +426,10 @@ en:
       name: 'LeadSquared'
       short_description: 'Sync your contacts and conversations with LeadSquared CRM.'
       description: 'Sync your contacts and conversations with LeadSquared CRM. This integration automatically creates leads in LeadSquared when new contacts are added, and logs conversation activity to provide your sales team with complete context.'
+    typebot:
+      name: 'Typebot'
+      short_description: 'Integrate Typebot chatbots into your ViperChat inboxes.'
+      description: 'Connect your Typebot instance to automate customer conversations using interactive chatbots.'
   captain:
     copilot_message_required: Message is required
     copilot_error: 'Please connect an assistant to this inbox to use Copilot'

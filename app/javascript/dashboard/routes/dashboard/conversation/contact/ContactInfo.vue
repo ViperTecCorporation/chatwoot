@@ -12,6 +12,8 @@ import Avatar from 'next/avatar/Avatar.vue';
 import SocialIcons from './SocialIcons.vue';
 import EditContact from './EditContact.vue';
 import ContactMergeModal from 'dashboard/modules/contact/ContactMergeModal.vue';
+import ContactReminderModal from 'dashboard/modules/contact/ContactReminderModal.vue';
+import ContactRemindersList from './ContactRemindersList.vue';
 import ContactLabels from 'dashboard/components-next/Contacts/ContactLabels/ContactLabels.vue';
 import ContactDeleteModal from 'dashboard/modules/contact/ContactDeleteModal.vue';
 import ComposeConversation from 'dashboard/components-next/NewConversation/ComposeConversation.vue';
@@ -28,6 +30,8 @@ export default {
     ComposeConversation,
     SocialIcons,
     ContactMergeModal,
+    ContactReminderModal,
+    ContactRemindersList,
     ContactLabels,
     ContactDeleteModal,
     VoiceCallButton,
@@ -341,6 +345,7 @@ export default {
             </span>
             <ContactLabels :contact-id="contact.id" />
           </div>
+          <ContactRemindersList v-if="contact.id" :contact-id="contact.id" />
           <ContactInfoRow
             v-if="location || additionalAttributes.location"
             :value="location || additionalAttributes.location"
@@ -380,6 +385,21 @@ export default {
           sm
           @click="toggleEditModal"
         />
+        <ContactReminderModal
+          v-if="currentChat.id"
+          :contact-id="contact.id"
+          :conversation-id="currentChat.id"
+        >
+          <template #trigger>
+            <NextButton
+              v-tooltip.top-end="'Criar Agendamento'"
+              icon="i-lucide-calendar-clock"
+              slate
+              faded
+              sm
+            />
+          </template>
+        </ContactReminderModal>
         <ContactMergeModal :primary-contact="contact">
           <template #trigger>
             <NextButton

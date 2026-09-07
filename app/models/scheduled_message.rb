@@ -6,7 +6,7 @@ class ScheduledMessage < ApplicationRecord
   belongs_to :target_conversation, class_name: 'Conversation', optional: true
   belongs_to :contact
   belongs_to :inbox
-  belongs_to :label
+  belongs_to :label, optional: true
   belongs_to :created_by, class_name: 'User'
   belongs_to :sender, class_name: 'User'
   belongs_to :message, optional: true
@@ -16,12 +16,26 @@ class ScheduledMessage < ApplicationRecord
 
   validates :scheduled_at, presence: true
   validate :scheduled_at_must_be_in_the_future, if: :scheduled?
-  validate :whatsapp_inbox
   validate :account_consistency
-  validate :items_count_within_limit
-  validates_associated :items
+  validate :items_count_within_limit, unless: :is_task?
+  validates_associated :items, unless: :is_task?
 
   scope :due, -> { scheduled.where(scheduled_at: ..Time.current) }
+  scope :due_tasks, -> { scheduled.where(is_task: true, scheduled_at: ..Time.current) }
+  scope :due_messages, -> { scheduled.where(is_task: false, scheduled_at: ..Time.current) }
+
+  def push_event_data
+    {
+      id: id,
+      reason: reason,
+      content: content,
+      is_task: is_task,
+      scheduled_at: scheduled_at,
+      status: status,
+      conversation_id: conversation.display_id,
+      account_id: account_id
+    }
+  end
 
   def ensure_legacy_item!
     return if items.exists?
@@ -42,10 +56,6 @@ class ScheduledMessage < ApplicationRecord
 
   def scheduled_at_must_be_in_the_future
     errors.add(:scheduled_at, 'must be in the future') if scheduled_at && scheduled_at <= Time.current
-  end
-
-  def whatsapp_inbox
-    errors.add(:inbox, 'must be a WhatsApp inbox') if inbox && !inbox.whatsapp?
   end
 
   def account_consistency
