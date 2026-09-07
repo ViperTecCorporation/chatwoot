@@ -12,13 +12,14 @@ import WithLabel from 'v3/components/Form/WithLabel.vue';
 import NextInput from 'next/input/Input.vue';
 import BaseSettingsHeader from '../components/BaseSettingsHeader.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
-import Switch from 'next/switch/Switch.vue';
-import ColorPicker from 'dashboard/components-next/colorpicker/ColorPicker.vue';
+import SwitchControl from 'next/switch/Switch.vue';
 import AccountId from './components/AccountId.vue';
 import BuildInfo from './components/BuildInfo.vue';
 import AccountDelete from './components/AccountDelete.vue';
 import AudioTranscription from './components/AudioTranscription.vue';
 import DeletedMessageContent from './components/DeletedMessageContent.vue';
+import LegacyMessageComposer from './components/LegacyMessageComposer.vue';
+import TeamConversationsInMine from './components/TeamConversationsInMine.vue';
 import SectionLayout from './components/SectionLayout.vue';
 
 export default {
@@ -30,12 +31,12 @@ export default {
     AccountDelete,
     AudioTranscription,
     DeletedMessageContent,
+    LegacyMessageComposer,
+    TeamConversationsInMine,
     SectionLayout,
-    // eslint-disable-next-line vue/no-reserved-component-names
-    Switch,
+    SwitchControl,
     WithLabel,
     NextInput,
-    ColorPicker,
   },
   setup() {
     const { updateUISettings, uiSettings } = useUISettings();
@@ -50,21 +51,6 @@ export default {
           open_waiting_conversations_by_default: value,
         }),
     });
-    const activeTheme = computed({
-      get: () => uiSettings.value.active_theme || 'default',
-      set: value => {
-        updateUISettings({ active_theme: value });
-        if (value !== 'custom') {
-          updateUISettings({ custom_brand_color: null });
-        }
-      },
-    });
-    const customBrandColor = computed({
-      get: () => uiSettings.value.custom_brand_color || '#2781f6',
-      set: value => {
-        updateUISettings({ custom_brand_color: value, active_theme: 'custom' });
-      },
-    });
 
     return {
       updateUISettings,
@@ -73,8 +59,6 @@ export default {
       enabledLanguages,
       accountId,
       openWaitingConversationsByDefault,
-      activeTheme,
-      customBrandColor,
     };
   },
   data() {
@@ -134,8 +118,18 @@ export default {
       return this.getAccount(this.accountId) || {};
     },
   },
+  watch: {
+    'currentAccount.id'(id) {
+      if (id) {
+        this.initializeAccount();
+      }
+    },
+  },
   mounted() {
-    this.initializeAccount();
+    // Account already in the store (navigated in): seed immediately.
+    if (this.currentAccount.id) {
+      this.initializeAccount();
+    }
   },
   methods: {
     async initializeAccount() {
@@ -282,66 +276,8 @@ export default {
     </div>
     <AudioTranscription v-if="showAudioTranscriptionConfig" />
     <DeletedMessageContent />
-    <SectionLayout
-      with-border
-      :title="$t('GENERAL_SETTINGS.FORM.BRAND_COLOR_SECTION.TITLE')"
-      :description="$t('GENERAL_SETTINGS.FORM.BRAND_COLOR_SECTION.NOTE')"
-    >
-      <div class="flex flex-col gap-4">
-        <div class="flex gap-4">
-          <button
-            class="flex items-center gap-2 px-4 py-3 border border-solid rounded-lg text-sm font-medium transition-all cursor-pointer"
-            :class="
-              activeTheme === 'default'
-                ? 'border-n-brand bg-n-brand/5 text-n-brand'
-                : 'border-n-weak bg-n-surface-2 text-n-slate-12 hover:border-n-strong'
-            "
-            @click="activeTheme = 'default'"
-          >
-            <span class="w-4 h-4 rounded-sm bg-[#2781f6] inline-block" />
-            {{ $t('GENERAL_SETTINGS.FORM.BRAND_COLOR_SECTION.THEME_ORIGINAL') }}
-          </button>
-          <button
-            class="flex items-center gap-2 px-4 py-3 border border-solid rounded-lg text-sm font-medium transition-all cursor-pointer"
-            :class="
-              activeTheme === 'viper'
-                ? 'border-n-brand bg-n-brand/5 text-n-brand'
-                : 'border-n-weak bg-n-surface-2 text-n-slate-12 hover:border-n-strong'
-            "
-            @click="activeTheme = 'viper'"
-          >
-            <span class="w-4 h-4 rounded-sm bg-[#6f3935] inline-block" />
-            {{ $t('GENERAL_SETTINGS.FORM.BRAND_COLOR_SECTION.THEME_VIPER') }}
-          </button>
-          <button
-            class="flex items-center gap-2 px-4 py-3 border border-solid rounded-lg text-sm font-medium transition-all cursor-pointer"
-            :class="
-              activeTheme === 'glow'
-                ? 'border-n-brand bg-n-brand/5 text-n-brand'
-                : 'border-n-weak bg-n-surface-2 text-n-slate-12 hover:border-n-strong'
-            "
-            @click="activeTheme = 'glow'"
-          >
-            <span class="w-4 h-4 rounded-sm bg-[#7c3aed] inline-block" />
-            {{ $t('GENERAL_SETTINGS.FORM.BRAND_COLOR_SECTION.THEME_GLOW') }}
-          </button>
-        </div>
-        <div class="flex items-center gap-4 mt-2">
-          <ColorPicker v-model="customBrandColor" />
-          <div class="w-40">
-            <NextInput
-              v-model="customBrandColor"
-              type="text"
-              placeholder="#2781f6"
-              class="w-full"
-            />
-          </div>
-          <span class="text-sm text-n-slate-11">
-            {{ $t('GENERAL_SETTINGS.FORM.BRAND_COLOR_SECTION.CUSTOM') }}
-          </span>
-        </div>
-      </div>
-    </SectionLayout>
+    <TeamConversationsInMine />
+    <LegacyMessageComposer />
     <SectionLayout
       with-border
       :title="$t('GENERAL_SETTINGS.FORM.WAITING_CONVERSATIONS_SECTION.TITLE')"
@@ -351,7 +287,7 @@ export default {
     >
       <template #headerActions>
         <div class="flex justify-end">
-          <Switch v-model="openWaitingConversationsByDefault" />
+          <SwitchControl v-model="openWaitingConversationsByDefault" />
         </div>
       </template>
     </SectionLayout>

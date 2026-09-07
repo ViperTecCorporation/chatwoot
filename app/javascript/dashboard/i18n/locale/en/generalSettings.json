@@ -70,6 +70,13 @@
         "IGNORE_WAITING": {
           "LABEL": "Skip conversations waiting for agent’s reply"
         },
+        "INBOXES": {
+          "LABEL": "Apply only to selected inboxes",
+          "HELP": "Leave all inboxes unselected to apply auto-resolution to every inbox."
+        },
+        "SEND_TO_GROUPS": {
+          "LABEL": "Apply to groups"
+        },
         "UPDATE_BUTTON": "Save Changes"
       },
       "NAME": {
@@ -113,17 +120,25 @@
           "ERROR": "Failed to update deleted message setting"
         }
       },
-      "BRAND_COLOR_SECTION": {
-        "TITLE": "Customize Brand Color",
-        "NOTE": "Choose the color scheme for your Chatwoot interface.",
-        "THEME_ORIGINAL": "Original Blue",
-        "THEME_VIPER": "Viper Brown",
-        "THEME_GLOW": "Custom Glow",
-        "CUSTOM": "Choose your color"
+      "TEAM_CONVERSATIONS_IN_MINE": {
+        "TITLE": "Show team conversations in Mine",
+        "NOTE": "When enabled, conversations assigned to a team appear in the Mine tab for every agent on that team. Disable it to show only conversations assigned directly to each agent.",
+        "API": {
+          "SUCCESS": "Mine tab preference updated successfully",
+          "ERROR": "Failed to update the Mine tab preference"
+        }
+      },
+      "MESSAGE_COMPOSER": {
+        "TITLE": "Use classic message editor",
+        "NOTE": "Enable this to return to the previous editor. When disabled, ViperChat uses the new compact editor for chat channels; email inboxes keep the classic editor.",
+        "API": {
+          "SUCCESS": "Editor preference updated successfully",
+          "ERROR": "Failed to update the editor preference"
+        }
       },
       "WAITING_CONVERSATIONS_SECTION": {
-        "TITLE": "Enable Unattended tab in the top bar",
-        "NOTE": "Shows conversations waiting for a reply in the top bar and reorganizes the priority tab order."
+        "TITLE": "Waiting conversations",
+        "NOTE": "Open conversations that are waiting for a reply in the Waiting tab by default."
       },
       "AUTO_RESOLVE_DURATION": {
         "LABEL": "Inactivity duration for resolution",

@@ -70,6 +70,13 @@
         "IGNORE_WAITING": {
           "LABEL": "Pular conversas aguardando a resposta do agente"
         },
+        "INBOXES": {
+          "LABEL": "Aplicar somente às caixas selecionadas",
+          "HELP": "Deixe todas as caixas desmarcadas para aplicar a resolução automática em todas as caixas."
+        },
+        "SEND_TO_GROUPS": {
+          "LABEL": "Aplicar aos grupos"
+        },
         "UPDATE_BUTTON": "Salvar Alterações"
       },
       "NAME": {
@@ -113,17 +120,25 @@
           "ERROR": "Falha ao atualizar configuração de mensagens apagadas"
         }
       },
-      "BRAND_COLOR_SECTION": {
-        "TITLE": "Personalizar Cor da Marca",
-        "NOTE": "Escolha o esquema de cores para a interface do seu Chatwoot.",
-        "THEME_ORIGINAL": "Azul Original",
-        "THEME_VIPER": "Marrom Viper",
-        "THEME_GLOW": "Glow Personalizado",
-        "CUSTOM": "Escolha sua cor"
+      "TEAM_CONVERSATIONS_IN_MINE": {
+        "TITLE": "Exibir conversas dos times na aba Minhas",
+        "NOTE": "Quando ativado, conversas atribuídas a um time aparecem na aba Minhas de todos os agentes desse time. Desative para mostrar apenas as conversas atribuídas diretamente a cada agente.",
+        "API": {
+          "SUCCESS": "Preferência da aba Minhas atualizada com sucesso",
+          "ERROR": "Falha ao atualizar a preferência da aba Minhas"
+        }
+      },
+      "MESSAGE_COMPOSER": {
+        "TITLE": "Usar editor clássico de mensagens",
+        "NOTE": "Ative para voltar ao editor anterior. Desativado, o ViperChat usa o novo editor compacto para canais de conversa; caixas de e-mail continuam usando o editor clássico.",
+        "API": {
+          "SUCCESS": "Preferência do editor atualizada com sucesso",
+          "ERROR": "Falha ao atualizar a preferência do editor"
+        }
       },
       "WAITING_CONVERSATIONS_SECTION": {
-        "TITLE": "Habilitar aba de Não Atendidas na barra superior",
-        "NOTE": "Exibe as conversas que estão aguardando resposta na barra superior e reorganiza a ordem das abas prioritárias."
+        "TITLE": "Conversas aguardando",
+        "NOTE": "Abrir automaticamente as conversas que estão aguardando resposta na aba Aguardando."
       },
       "AUTO_RESOLVE_DURATION": {
         "LABEL": "Tempo de inatividade para resolução",

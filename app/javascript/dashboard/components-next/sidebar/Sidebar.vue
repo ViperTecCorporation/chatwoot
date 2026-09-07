@@ -14,16 +14,19 @@ import { useWindowSize, useEventListener } from '@vueuse/core';
 import Button from 'dashboard/components-next/button/Button.vue';
 import SidebarGroup from './SidebarGroup.vue';
 import SidebarProfileMenu from './SidebarProfileMenu.vue';
+import SidebarNotificationBell from './SidebarNotificationBell.vue';
 import SidebarChangelogCard from './SidebarChangelogCard.vue';
 import SidebarChangelogButton from './SidebarChangelogButton.vue';
 import ChannelLeaf from './ChannelLeaf.vue';
 import ChannelIcon from 'next/icon/ChannelIcon.vue';
 import SidebarAccountSwitcher from './SidebarAccountSwitcher.vue';
-import Logo from 'next/icon/Logo.vue';
-import CreateGroupModal from './CreateGroupModal.vue';
-import TeleportWithDirection from 'dashboard/components-next/TeleportWithDirection.vue';
 import ComposeConversation from 'dashboard/components-next/NewConversation/ComposeConversation.vue';
-import ComposeInternalChat from 'dashboard/components-next/InternalChat/ComposeInternalChat.vue';
+import {
+  SIDEBAR_SORT_SECTIONS,
+  getSidebarSortOptions,
+  resolveSidebarSort,
+  sortSidebarItems,
+} from 'dashboard/helper/sidebarSort';
 
 const props = defineProps({
   isMobileSidebarOpen: {
@@ -54,27 +57,9 @@ const isMobile = computed(() => windowWidth.value < 768);
 
 const accountId = useMapGetter('getCurrentAccountId');
 const inboxes = useMapGetter('inboxes/getInboxes');
+const currentUserId = useMapGetter('getCurrentUserID');
 const isFeatureEnabledonAccount = useMapGetter(
   'accounts/isFeatureEnabledonAccount'
-);
-const showCreateGroupModal = ref(false);
-
-const normalizedValue = value => (value || '').toString().toLowerCase();
-
-const isUnoapiWhatsappInbox = inbox => {
-  const channelType = normalizedValue(inbox.channel_type || inbox.channelType);
-  const provider = normalizedValue(
-    inbox.provider || inbox.providerName || inbox.provider_name
-  );
-
-  return channelType.includes('whatsapp') && provider.includes('uno');
-};
-
-const isGroupCreationAvailable = false;
-const unoapiInboxes = computed(() =>
-  isGroupCreationAvailable
-    ? inboxes.value.filter(inbox => isUnoapiWhatsappInbox(inbox))
-    : []
 );
 
 const hasAdvancedAssignment = computed(() => {
@@ -91,19 +76,37 @@ const hasConversationUnreadCounts = computed(() => {
   );
 });
 
+const hasFilteredUnreadCounts = computed(() => {
+  return (
+    hasConversationUnreadCounts.value &&
+    isFeatureEnabledonAccount.value(
+      accountId.value,
+      FEATURE_FLAGS.UNREAD_COUNT_FOR_FILTERS
+    )
+  );
+});
+
+const hasDataImport = computed(() => {
+  return isFeatureEnabledonAccount.value(
+    accountId.value,
+    FEATURE_FLAGS.DATA_IMPORT
+  );
+});
+
 const fetchConversationUnreadCounts = ([currentAccountId, isEnabled]) => {
   if (!currentAccountId) return;
 
-  try {
-    if (!isEnabled) {
-      store.dispatch('conversationUnreadCounts/clear');
-      return;
-    }
-
-    store.dispatch('conversationUnreadCounts/get');
-  } catch {
-    // conversationUnreadCounts module not registered
+  if (!isEnabled) {
+    store.dispatch('conversationUnreadCounts/clear');
+    return;
   }
+
+  store.dispatch('conversationUnreadCounts/get');
+};
+
+const fetchSidebarSortPreferences = ([currentAccountId, userId]) => {
+  if (!currentAccountId || !userId) return;
+  store.dispatch('sidebarSortPreferences/initialize');
 };
 
 const toggleShortcutModalFn = show => {
@@ -122,28 +125,35 @@ const setExpandedItem = name => {
   expandedItem.value = expandedItem.value === name ? null : name;
 };
 
-const onGroupCreated = conversation => {
-  if (conversation?.id) {
-    window.location.assign(
-      `/app/accounts/${accountId.value}/conversations/${conversation.id}`
-    );
-  }
-};
-
 const {
   sidebarWidth,
   isCollapsed,
   setSidebarWidth,
   saveWidth,
+  snapToCollapsed,
   snapToExpanded,
-  toggleCollapse,
-  MIN_WIDTH,
+  COLLAPSED_THRESHOLD,
 } = useSidebarResize();
 
 // On mobile, sidebar is always expanded (flyout mode)
 const isEffectivelyCollapsed = computed(
   () => !isMobile.value && isCollapsed.value
 );
+const sidebarToggleLabel = computed(() =>
+  isEffectivelyCollapsed.value
+    ? t('SIDEBAR.EXPAND_SIDEBAR')
+    : t('SIDEBAR.COLLAPSE_SIDEBAR')
+);
+const sidebarToggleIcon = computed(() =>
+  isEffectivelyCollapsed.value
+    ? 'i-lucide-panel-left-open'
+    : 'i-lucide-panel-left-close'
+);
+
+const toggleSidebarWidth = () => {
+  if (isEffectivelyCollapsed.value) snapToExpanded();
+  else snapToCollapsed();
+};
 
 // Resize handle logic
 const isResizing = ref(false);
@@ -186,12 +196,18 @@ const onResizeEnd = () => {
 
   isResizing.value = false;
   Object.assign(document.body.style, { cursor: '', userSelect: '' });
-  saveWidth();
+
+  // Snap to collapsed state if below threshold
+  if (sidebarWidth.value < COLLAPSED_THRESHOLD) {
+    snapToCollapsed();
+  } else {
+    saveWidth();
+  }
 };
 
 const onResizeHandleDoubleClick = () => {
-  if (sidebarWidth.value <= MIN_WIDTH) snapToExpanded();
-  else setSidebarWidth(MIN_WIDTH);
+  if (isCollapsed.value) snapToExpanded();
+  else snapToCollapsed();
 };
 
 // Support both mouse and touch events
@@ -201,28 +217,38 @@ useEventListener(document, 'touchmove', onResizeMove, { passive: true });
 useEventListener(document, 'touchend', onResizeEnd);
 
 const labels = useMapGetter('labels/getLabelsOnSidebar');
-
-const safeUnreadCountGetter = key => {
-  const source = useMapGetter(key);
-  return computed(() => {
-    const fn = source.value;
-    return (...args) => (typeof fn === 'function' ? fn(...args) : 0);
-  });
-};
-
-const getInboxUnreadCount = safeUnreadCountGetter(
+const allUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getAllUnreadCount'
+);
+const notificationUnreadCount = useMapGetter('notifications/getUnreadCount');
+const getInboxUnreadCount = useMapGetter(
   'conversationUnreadCounts/getInboxUnreadCount'
 );
-const getLabelUnreadCount = safeUnreadCountGetter(
+const getLabelUnreadCount = useMapGetter(
   'conversationUnreadCounts/getLabelUnreadCount'
 );
-const getTeamUnreadCount = safeUnreadCountGetter(
+const getTeamUnreadCount = useMapGetter(
   'conversationUnreadCounts/getTeamUnreadCount'
+);
+const mentionsUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getMentionsUnreadCount'
+);
+const participatingUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getParticipatingUnreadCount'
+);
+const unattendedUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getUnattendedUnreadCount'
+);
+const getFolderUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getFolderUnreadCount'
 );
 const teams = useMapGetter('teams/getMyTeams');
 const contactCustomViews = useMapGetter('customViews/getContactCustomViews');
 const conversationCustomViews = useMapGetter(
   'customViews/getConversationCustomViews'
+);
+const getSidebarSectionSort = useMapGetter(
+  'sidebarSortPreferences/getSectionSort'
 );
 
 onMounted(() => {
@@ -239,44 +265,71 @@ watch([accountId, hasConversationUnreadCounts], fetchConversationUnreadCounts, {
   immediate: true,
 });
 
-const normalizeUnreadCount = count => {
-  const unreadCount = Number(count);
-  return Number.isFinite(unreadCount) && unreadCount > 0 ? unreadCount : 0;
+watch([accountId, currentUserId], fetchSidebarSortPreferences, {
+  immediate: true,
+});
+
+const hasUnreadCountsForSection = section => {
+  if (section === SIDEBAR_SORT_SECTIONS.FOLDERS) {
+    return hasFilteredUnreadCounts.value;
+  }
+
+  return hasConversationUnreadCounts.value;
 };
 
-const sortByUnreadCount = (items, labelKey, unreadCountKey) =>
-  items.slice().sort((a, b) => {
-    const unreadCountDiff =
-      normalizeUnreadCount(unreadCountKey(b)) -
-      normalizeUnreadCount(unreadCountKey(a));
-
-    if (unreadCountDiff !== 0) return unreadCountDiff;
-
-    return labelKey(a).localeCompare(labelKey(b));
+const getSortOptionsForSection = section =>
+  getSidebarSortOptions(section, {
+    hasUnreadCounts: hasUnreadCountsForSection(section),
   });
 
+const getSortForSection = section =>
+  resolveSidebarSort(section, getSidebarSectionSort.value(section), {
+    hasUnreadCounts: hasUnreadCountsForSection(section),
+  });
+
+const updateSortPreference = (section, sortBy) => {
+  store.dispatch('sidebarSortPreferences/setSectionSort', {
+    section,
+    sortBy,
+  });
+};
+
+const buildSortConfig = section => ({
+  sortOptions: getSortOptionsForSection(section),
+  activeSort: getSortForSection(section),
+  onSortChange: sortBy => updateSortPreference(section, sortBy),
+});
+
+const sortedFolders = computed(() =>
+  sortSidebarItems(conversationCustomViews.value, {
+    sortBy: getSortForSection(SIDEBAR_SORT_SECTIONS.FOLDERS),
+    labelKey: view => view.name,
+    unreadCountKey: view => getFolderUnreadCount.value(view.id),
+  })
+);
+
 const sortedTeams = computed(() =>
-  sortByUnreadCount(
-    teams.value,
-    team => team.name,
-    team => getTeamUnreadCount.value(team.id)
-  )
+  sortSidebarItems(teams.value, {
+    sortBy: getSortForSection(SIDEBAR_SORT_SECTIONS.TEAMS),
+    labelKey: team => team.name,
+    unreadCountKey: team => getTeamUnreadCount.value(team.id),
+  })
 );
 
 const sortedInboxes = computed(() =>
-  sortByUnreadCount(
-    inboxes.value,
-    inbox => inbox.name,
-    inbox => getInboxUnreadCount.value(inbox.id)
-  )
+  sortSidebarItems(inboxes.value, {
+    sortBy: getSortForSection(SIDEBAR_SORT_SECTIONS.CHANNELS),
+    labelKey: inbox => inbox.name,
+    unreadCountKey: inbox => getInboxUnreadCount.value(inbox.id),
+  })
 );
 
 const sortedLabels = computed(() =>
-  sortByUnreadCount(
-    labels.value,
-    label => label.title,
-    label => getLabelUnreadCount.value(label.id)
-  )
+  sortSidebarItems(labels.value, {
+    sortBy: getSortForSection(SIDEBAR_SORT_SECTIONS.LABELS),
+    labelKey: label => label.title,
+    unreadCountKey: label => getLabelUnreadCount.value(label.id),
+  })
 );
 
 const closeMobileSidebar = () => {
@@ -312,39 +365,8 @@ const newReportRoutes = () => [
 
 const reportRoutes = computed(() => newReportRoutes());
 
-const kanbanPipelines = computed(() => {
-  const allLabels = store.getters['labels/getLabels'] || [];
-  const configLabel = allLabels.find(l => l.title === '_kanban_config');
-  if (configLabel && configLabel.description) {
-    try {
-      const desc = configLabel.description;
-      const prefix = '[KANBAN_CONFIG]';
-      if (desc.startsWith(prefix)) {
-        const jsonStr = desc.substring(prefix.length);
-        const parsed = JSON.parse(jsonStr);
-        if (parsed && Array.isArray(parsed.pipelines)) {
-          return parsed.pipelines;
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-  return [{ id: 1, name: 'Vendas' }];
-});
-
 const menuItems = computed(() => {
   return [
-    {
-      name: 'Inbox',
-      label: t('SIDEBAR.INBOX'),
-      icon: 'i-lucide-inbox',
-      to: accountScopedRoute('inbox_view'),
-      activeOn: ['inbox_view', 'inbox_view_conversation'],
-      getterKeys: {
-        count: 'notifications/getUnreadCount',
-      },
-    },
     {
       name: 'Conversation',
       label: t('SIDEBAR.CONVERSATIONS'),
@@ -353,18 +375,28 @@ const menuItems = computed(() => {
         {
           name: 'All',
           label: t('SIDEBAR.ALL_CONVERSATIONS'),
+          icon: 'i-lucide-inbox',
+          badgeCount: allUnreadCount.value,
           activeOn: ['inbox_conversation'],
           to: accountScopedRoute('home'),
         },
         {
           name: 'Mentions',
           label: t('SIDEBAR.MENTIONED_CONVERSATIONS'),
+          icon: 'i-lucide-at-sign',
+          badgeCount: hasFilteredUnreadCounts.value
+            ? mentionsUnreadCount.value
+            : 0,
           activeOn: ['conversation_through_mentions'],
           to: accountScopedRoute('conversation_mentions'),
         },
         {
           name: 'Participating',
           label: t('SIDEBAR.PARTICIPATING_CONVERSATIONS'),
+          icon: 'i-lucide-user-round-check',
+          badgeCount: hasFilteredUnreadCounts.value
+            ? participatingUnreadCount.value
+            : 0,
           activeOn: ['conversation_through_participating'],
           to: accountScopedRoute('conversation_participating'),
         },
@@ -372,6 +404,10 @@ const menuItems = computed(() => {
           name: 'Unattended',
           activeOn: ['conversation_through_unattended'],
           label: t('SIDEBAR.UNATTENDED_CONVERSATIONS'),
+          icon: 'i-lucide-clock-alert',
+          badgeCount: hasFilteredUnreadCounts.value
+            ? unattendedUnreadCount.value
+            : 0,
           to: accountScopedRoute('conversation_unattended'),
         },
         {
@@ -379,9 +415,15 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.CUSTOM_VIEWS_FOLDER'),
           icon: 'i-lucide-folder',
           activeOn: ['conversations_through_folders'],
-          children: conversationCustomViews.value.map(view => ({
+          ...buildSortConfig(SIDEBAR_SORT_SECTIONS.FOLDERS),
+          collapsible: true,
+          showTreeLine: true,
+          children: sortedFolders.value.map(view => ({
             name: `${view.name}-${view.id}`,
             label: view.name,
+            badgeCount: hasFilteredUnreadCounts.value
+              ? getFolderUnreadCount.value(view.id)
+              : 0,
             to: accountScopedRoute('folder_conversations', { id: view.id }),
           })),
         },
@@ -390,6 +432,9 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.TEAMS'),
           icon: 'i-lucide-users',
           activeOn: ['conversations_through_team'],
+          ...buildSortConfig(SIDEBAR_SORT_SECTIONS.TEAMS),
+          collapsible: true,
+          showTreeLine: true,
           children: sortedTeams.value.map(team => ({
             name: `${team.name}-${team.id}`,
             label: team.name,
@@ -402,6 +447,9 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.CHANNELS'),
           icon: 'i-lucide-mailbox',
           activeOn: ['conversation_through_inbox'],
+          ...buildSortConfig(SIDEBAR_SORT_SECTIONS.CHANNELS),
+          collapsible: true,
+          showTreeLine: true,
           children: sortedInboxes.value.map(inbox => ({
             name: `${inbox.name}-${inbox.id}`,
             label: inbox.name,
@@ -422,6 +470,9 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.LABELS'),
           icon: 'i-lucide-tag',
           activeOn: ['conversations_through_label'],
+          ...buildSortConfig(SIDEBAR_SORT_SECTIONS.LABELS),
+          collapsible: true,
+          showTreeLine: true,
           children: sortedLabels.value.map(label => ({
             name: `${label.title}-${label.id}`,
             label: label.title,
@@ -441,108 +492,6 @@ const menuItems = computed(() => {
           icon: 'i-lucide-calendar-clock',
           to: accountScopedRoute('scheduled_messages'),
           activeOn: ['scheduled_messages'],
-        },
-      ],
-    },
-    {
-      name: 'Kanban',
-      label: t('SIDEBAR.KANBAN'),
-      icon: 'i-lucide-columns-3',
-      activeOn: ['kanban_dashboard'],
-      children: [
-        {
-          name: 'KanbanOverview',
-          label: 'Visão geral',
-          to: accountScopedRoute('kanban_dashboard'),
-          activeOn: ['kanban_dashboard'],
-        },
-        {
-          name: 'FunnelsHeader',
-          label: 'Funis',
-          icon: h('span', { class: 'i-lucide-equal size-3' }),
-          activeOn: ['kanban_dashboard'],
-          children: kanbanPipelines.value.map(pipeline => ({
-            name: `Pipeline-${pipeline.id}`,
-            label: pipeline.name,
-            description: `Pipeline de ${pipeline.name}`,
-            pipeline: true,
-            to: {
-              name: 'kanban_dashboard',
-              query: { pipeline_id: pipeline.id },
-            },
-            activeOn: ['kanban_dashboard'],
-          })),
-        },
-      ],
-    },
-    {
-      name: 'Captain',
-      icon: 'i-woot-captain',
-      label: t('SIDEBAR.CAPTAIN'),
-      activeOn: ['captain_assistants_create_index'],
-      children: [
-        {
-          name: 'FAQs',
-          label: t('SIDEBAR.CAPTAIN_RESPONSES'),
-          activeOn: [
-            'captain_assistants_responses_index',
-            'captain_assistants_responses_pending',
-          ],
-          to: accountScopedRoute('captain_assistants_index', {
-            navigationPath: 'captain_assistants_responses_index',
-          }),
-        },
-        {
-          name: 'Documents',
-          label: t('SIDEBAR.CAPTAIN_DOCUMENTS'),
-          activeOn: ['captain_assistants_documents_index'],
-          to: accountScopedRoute('captain_assistants_index', {
-            navigationPath: 'captain_assistants_documents_index',
-          }),
-        },
-        {
-          name: 'Scenarios',
-          label: t('SIDEBAR.CAPTAIN_SCENARIOS'),
-          activeOn: ['captain_assistants_scenarios_index'],
-          to: accountScopedRoute('captain_assistants_index', {
-            navigationPath: 'captain_assistants_scenarios_index',
-          }),
-        },
-        {
-          name: 'Playground',
-          label: t('SIDEBAR.CAPTAIN_PLAYGROUND'),
-          activeOn: ['captain_assistants_playground_index'],
-          to: accountScopedRoute('captain_assistants_index', {
-            navigationPath: 'captain_assistants_playground_index',
-          }),
-        },
-        {
-          name: 'Inboxes',
-          label: t('SIDEBAR.CAPTAIN_INBOXES'),
-          activeOn: ['captain_assistants_inboxes_index'],
-          to: accountScopedRoute('captain_assistants_index', {
-            navigationPath: 'captain_assistants_inboxes_index',
-          }),
-        },
-        {
-          name: 'Tools',
-          label: t('SIDEBAR.CAPTAIN_TOOLS'),
-          activeOn: ['captain_tools_index'],
-          to: accountScopedRoute('captain_assistants_index', {
-            navigationPath: 'captain_tools_index',
-          }),
-        },
-        {
-          name: 'Settings',
-          label: t('SIDEBAR.CAPTAIN_SETTINGS'),
-          activeOn: [
-            'captain_assistants_settings_index',
-            'captain_assistants_guidelines_index',
-            'captain_assistants_guardrails_index',
-          ],
-          to: accountScopedRoute('captain_assistants_index', {
-            navigationPath: 'captain_assistants_settings_index',
-          }),
         },
       ],
     },
@@ -568,9 +517,22 @@ const menuItems = computed(() => {
           activeOn: ['contacts_dashboard_active'],
         },
         {
+          name: 'Companies',
+          label: t('SIDEBAR.COMPANIES'),
+          icon: 'i-lucide-building-2',
+          to: accountScopedRoute(
+            'companies_dashboard_index',
+            {},
+            { page: 1, search: undefined }
+          ),
+          activeOn: ['companies_dashboard_index', 'companies_dashboard_show'],
+        },
+        {
           name: 'Segments',
           icon: 'i-lucide-group',
           label: t('SIDEBAR.CUSTOM_VIEWS_SEGMENTS'),
+          collapsible: true,
+          showTreeLine: true,
           children: contactCustomViews.value.map(view => ({
             name: `${view.name}-${view.id}`,
             label: view.name,
@@ -589,6 +551,8 @@ const menuItems = computed(() => {
           name: 'Tagged With',
           icon: 'i-lucide-tag',
           label: t('SIDEBAR.TAGGED_WITH'),
+          collapsible: true,
+          showTreeLine: true,
           children: labels.value.map(label => ({
             name: `${label.title}-${label.id}`,
             label: label.title,
@@ -606,23 +570,6 @@ const menuItems = computed(() => {
               'contacts_edit_label',
             ],
           })),
-        },
-      ],
-    },
-    {
-      name: 'Companies',
-      label: t('SIDEBAR.COMPANIES'),
-      icon: 'i-lucide-building-2',
-      children: [
-        {
-          name: 'All Companies',
-          label: t('SIDEBAR.ALL_COMPANIES'),
-          to: accountScopedRoute(
-            'companies_dashboard_index',
-            {},
-            { page: 1, search: undefined }
-          ),
-          activeOn: ['companies_dashboard_index', 'companies_dashboard_show'],
         },
       ],
     },
@@ -660,75 +607,6 @@ const menuItems = computed(() => {
       ],
     },
     {
-      name: 'Campaigns',
-      label: t('SIDEBAR.CAMPAIGNS'),
-      icon: 'i-lucide-megaphone',
-      children: [
-        {
-          name: 'Live chat',
-          label: t('SIDEBAR.LIVE_CHAT'),
-          to: accountScopedRoute('campaigns_livechat_index'),
-        },
-        {
-          name: 'SMS',
-          label: t('SIDEBAR.SMS'),
-          to: accountScopedRoute('campaigns_sms_index'),
-        },
-        {
-          name: 'WhatsApp',
-          label: t('SIDEBAR.WHATSAPP'),
-          to: accountScopedRoute('campaigns_whatsapp_index'),
-        },
-      ],
-    },
-    {
-      name: 'Portals',
-      label: t('SIDEBAR.HELP_CENTER.TITLE'),
-      icon: 'i-lucide-library-big',
-      children: [
-        {
-          name: 'Articles',
-          label: t('SIDEBAR.HELP_CENTER.ARTICLES'),
-          activeOn: [
-            'portals_articles_index',
-            'portals_articles_new',
-            'portals_articles_edit',
-          ],
-          to: accountScopedRoute('portals_index', {
-            navigationPath: 'portals_articles_index',
-          }),
-        },
-        {
-          name: 'Categories',
-          label: t('SIDEBAR.HELP_CENTER.CATEGORIES'),
-          activeOn: [
-            'portals_categories_index',
-            'portals_categories_articles_index',
-            'portals_categories_articles_edit',
-          ],
-          to: accountScopedRoute('portals_index', {
-            navigationPath: 'portals_categories_index',
-          }),
-        },
-        {
-          name: 'Locales',
-          label: t('SIDEBAR.HELP_CENTER.LOCALES'),
-          activeOn: ['portals_locales_index'],
-          to: accountScopedRoute('portals_index', {
-            navigationPath: 'portals_locales_index',
-          }),
-        },
-        {
-          name: 'Settings',
-          label: t('SIDEBAR.HELP_CENTER.SETTINGS'),
-          activeOn: ['portals_settings_index'],
-          to: accountScopedRoute('portals_index', {
-            navigationPath: 'portals_settings_index',
-          }),
-        },
-      ],
-    },
-    {
       name: 'Settings',
       label: t('SIDEBAR.SETTINGS'),
       icon: 'i-lucide-bolt',
@@ -738,6 +616,70 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.ACCOUNT_SETTINGS'),
           icon: 'i-lucide-briefcase',
           to: accountScopedRoute('general_settings_index'),
+        },
+        {
+          name: 'Settings Dashboard',
+          label: t('SIDEBAR.DASHBOARD'),
+          icon: 'i-lucide-layout-dashboard',
+          children: [
+            {
+              name: 'Dashboard Captain',
+              label: t('SIDEBAR.CAPTAIN'),
+              icon: 'i-woot-captain',
+              activeOn: [
+                'captain_assistants_index',
+                'captain_assistants_create_index',
+                'captain_assistants_overview_index',
+                'captain_assistants_responses_index',
+                'captain_assistants_responses_pending',
+                'captain_assistants_documents_index',
+                'captain_tools_index',
+                'captain_assistants_scenarios_index',
+                'captain_assistants_playground_index',
+                'captain_assistants_inboxes_index',
+                'captain_assistants_settings_index',
+                'captain_assistants_guidelines_index',
+                'captain_assistants_guardrails_index',
+              ],
+              to: accountScopedRoute('captain_assistants_index', {
+                navigationPath: 'captain_assistants_overview_index',
+              }),
+            },
+            {
+              name: 'Dashboard Campaigns',
+              label: t('SIDEBAR.CAMPAIGNS'),
+              icon: 'i-lucide-megaphone',
+              activeOn: [
+                'campaigns_ongoing_index',
+                'campaigns_one_off_index',
+                'campaigns_livechat_index',
+                'campaigns_sms_index',
+                'campaigns_whatsapp_index',
+              ],
+              to: accountScopedRoute('campaigns_livechat_index'),
+            },
+            {
+              name: 'Dashboard Help Center',
+              label: t('SIDEBAR.HELP_CENTER.TITLE'),
+              icon: 'i-lucide-library-big',
+              activeOn: [
+                'portals_index',
+                'portals_new',
+                'portals_articles_index',
+                'portals_articles_new',
+                'portals_articles_edit',
+                'portals_categories_index',
+                'portals_categories_articles_index',
+                'portals_categories_articles_new',
+                'portals_categories_articles_edit',
+                'portals_locales_index',
+                'portals_settings_index',
+              ],
+              to: accountScopedRoute('portals_index', {
+                navigationPath: 'portals_articles_index',
+              }),
+            },
+          ],
         },
         // {
         //   name: 'Settings Captain',
@@ -842,6 +784,16 @@ const menuItems = computed(() => {
           icon: 'i-lucide-blocks',
           to: accountScopedRoute('settings_applications'),
         },
+        ...(hasDataImport.value
+          ? [
+              {
+                name: 'Settings Data',
+                label: t('SIDEBAR.DATA'),
+                icon: 'i-lucide-database',
+                to: accountScopedRoute('settings_data_imports'),
+              },
+            ]
+          : []),
         {
           name: 'Settings Audit Logs',
           label: t('SIDEBAR.AUDIT_LOGS'),
@@ -896,23 +848,16 @@ const menuItems = computed(() => {
         ],
       },
     ]"
-    class="bg-n-background flex flex-col text-sm pb-px fixed top-0 ltr:left-0 rtl:right-0 h-full z-40 w-[200px] md:w-auto md:relative md:flex-shrink-0 ltr:border-r rtl:border-l border-n-weak"
+    class="bg-n-background flex flex-col text-sm pb-px fixed top-0 ltr:left-0 rtl:right-0 h-full z-40 w-[200px] md:w-auto md:relative md:flex-shrink-0 md:ltr:translate-x-0 md:rtl:translate-x-0 ltr:border-r rtl:border-l border-n-weak"
     :class="[
       {
         'shadow-lg md:shadow-none': isMobileSidebarOpen,
-        'transition-transform duration-200 ease-out': !isResizing && isMobile,
-        'transition-[width] duration-200 ease-out': !isResizing && !isMobile,
+        'ltr:-translate-x-full rtl:translate-x-full': !isMobileSidebarOpen,
+        'transition-transform duration-200 ease-out md:transition-[width]':
+          !isResizing,
       },
     ]"
-    :style="{
-      transform:
-        isMobile && !isMobileSidebarOpen
-          ? isRTL
-            ? 'translateX(100%)'
-            : 'translateX(-100%)'
-          : undefined,
-      width: !isMobile ? `${sidebarWidth}px` : undefined,
-    }"
+    :style="isMobile ? undefined : { width: `${sidebarWidth}px` }"
   >
     <section
       class="grid"
@@ -930,34 +875,16 @@ const menuItems = computed(() => {
             is-collapsed
             @show-create-account-modal="emit('showCreateAccountModal')"
           />
-          <button
-            class="flex items-center justify-center size-8 rounded-lg text-n-slate-11 hover:bg-n-alpha-2"
-            :title="$t('SIDEBAR.EXPAND')"
-            @click="toggleCollapse"
-          >
-            <span class="i-lucide-chevron-right size-4" />
-          </button>
         </template>
         <template v-else>
-          <div class="grid flex-shrink-0 place-content-center size-6">
-            <Logo class="size-4" />
-          </div>
-          <div class="flex-shrink-0 w-px h-3 bg-n-strong" />
           <SidebarAccountSwitcher
-            class="flex-grow -mx-1 min-w-0"
+            class="flex-grow min-w-0"
             @show-create-account-modal="emit('showCreateAccountModal')"
           />
-          <button
-            class="flex-shrink-0 size-8 grid place-content-center rounded-lg text-n-slate-11 hover:bg-n-alpha-2"
-            :title="$t('SIDEBAR.COLLAPSE')"
-            @click="toggleCollapse"
-          >
-            <span class="i-lucide-chevron-left size-4" />
-          </button>
         </template>
       </div>
       <div
-        class="flex gap-2 min-w-0"
+        class="flex gap-2"
         :class="isEffectivelyCollapsed ? 'flex-col items-center' : 'px-2'"
       >
         <RouterLink
@@ -988,37 +915,6 @@ const menuItems = computed(() => {
           class="flex gap-1 flex-shrink-0"
           :class="isEffectivelyCollapsed ? 'flex-col' : ''"
         >
-          <Button
-            v-if="unoapiInboxes.length"
-            v-tooltip.bottom="$t('CONVERSATION.GROUP.CREATE_GROUP')"
-            icon="i-lucide-message-circle-plus"
-            color="slate"
-            size="sm"
-            class="dark:hover:!bg-n-slate-9/30"
-            :class="[
-              isEffectivelyCollapsed
-                ? '!size-8 !outline-n-weak !text-n-slate-11'
-                : '!h-7 !outline-n-weak !text-n-slate-11',
-            ]"
-            @click="showCreateGroupModal = true"
-          />
-          <ComposeInternalChat align-position="right">
-            <template #trigger="{ toggle }">
-              <Button
-                v-tooltip.bottom="$t('CONVERSATION.INTERNAL_CHAT.TITLE')"
-                icon="i-lucide-users"
-                color="slate"
-                size="sm"
-                class="dark:hover:!bg-n-slate-9/30"
-                :class="[
-                  isEffectivelyCollapsed
-                    ? '!size-8 !outline-n-weak !text-n-slate-11'
-                    : '!h-7 !outline-n-weak !text-n-slate-11',
-                ]"
-                @click="toggle"
-              />
-            </template>
-          </ComposeInternalChat>
           <ComposeConversation align="start">
             <template #trigger="{ isOpen }">
               <Button
@@ -1038,13 +934,6 @@ const menuItems = computed(() => {
         </div>
       </div>
     </section>
-    <TeleportWithDirection to="body">
-      <CreateGroupModal
-        v-model:show="showCreateGroupModal"
-        :inboxes="inboxes"
-        @group-created="onGroupCreated"
-      />
-    </TeleportWithDirection>
     <nav
       class="grid overflow-y-scroll flex-grow gap-2 pb-5 no-scrollbar min-w-0"
       :class="isEffectivelyCollapsed ? 'px-1' : 'px-2'"
@@ -1081,9 +970,30 @@ const menuItems = computed(() => {
         "
       />
       <div
-        class="px-1 py-1.5 flex-shrink-0 flex w-full z-50 gap-2 items-center border-t border-n-weak shadow-[0px_-2px_4px_0px_rgba(27,28,29,0.02)]"
-        :class="isEffectivelyCollapsed ? 'justify-center' : 'justify-between'"
+        class="px-1 py-1.5 flex-shrink-0 flex flex-col w-full z-50 gap-1 border-t border-n-weak shadow-[0px_-2px_4px_0px_rgba(27,28,29,0.02)]"
       >
+        <div
+          class="hidden md:flex w-full"
+          :class="isEffectivelyCollapsed ? 'justify-center' : 'justify-end'"
+        >
+          <Button
+            v-tooltip.right="sidebarToggleLabel"
+            :aria-label="sidebarToggleLabel"
+            :icon="sidebarToggleIcon"
+            color="slate"
+            variant="ghost"
+            size="sm"
+            class="!size-8 !text-n-slate-11"
+            @click="toggleSidebarWidth"
+          />
+        </div>
+        <SidebarNotificationBell
+          :is-collapsed="isEffectivelyCollapsed"
+          :label="t('SIDEBAR.NOTIFICATIONS')"
+          :to="accountScopedRoute('inbox_view')"
+          :unread-count="notificationUnreadCount"
+          @navigate="closeMobileSidebar"
+        />
         <SidebarProfileMenu
           :is-collapsed="isEffectivelyCollapsed"
           @open-key-shortcut-modal="emit('openKeyShortcutModal')"
