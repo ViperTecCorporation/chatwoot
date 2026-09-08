@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 import { requestPushPermissions } from 'dashboard/helper/pushHelper';
-import SessionStorage from 'shared/helpers/sessionStorage';
 
 const props = defineProps({
   accountId: {
@@ -66,7 +65,11 @@ const syncPushState = async () => {
 
 const dismiss = () => {
   isDismissed.value = true;
-  SessionStorage.set(dismissalKey.value, true);
+  try {
+    localStorage.setItem(dismissalKey.value, 'true');
+  } catch {
+    // ignore
+  }
 };
 
 const activate = async () => {
@@ -99,7 +102,11 @@ const activate = async () => {
 };
 
 onMounted(() => {
-  isDismissed.value = Boolean(SessionStorage.get(dismissalKey.value));
+  try {
+    isDismissed.value = localStorage.getItem(dismissalKey.value) === 'true';
+  } catch {
+    isDismissed.value = false;
+  }
   syncPushState();
   window.addEventListener('focus', syncPushState);
 });
