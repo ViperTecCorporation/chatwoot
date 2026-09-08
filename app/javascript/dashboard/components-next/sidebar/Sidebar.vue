@@ -493,6 +493,13 @@ const menuItems = computed(() => {
           to: accountScopedRoute('scheduled_messages'),
           activeOn: ['scheduled_messages'],
         },
+        {
+          name: 'Kanban',
+          label: 'Kanban',
+          icon: 'i-lucide-layout-grid',
+          to: accountScopedRoute('kanban_dashboard'),
+          activeOn: ['kanban_dashboard'],
+        },
       ],
     },
     {
