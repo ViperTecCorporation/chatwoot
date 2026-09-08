@@ -25,7 +25,7 @@ const mountComponent = () =>
 
 describe('PushNotificationBanner', () => {
   beforeEach(() => {
-    window.sessionStorage.clear();
+    window.localStorage.clear();
     Object.defineProperty(window, 'chatwootConfig', {
       configurable: true,
       value: { vapidPublicKey: 'test-key' },
@@ -81,9 +81,6 @@ describe('PushNotificationBanner', () => {
       .trigger('click');
 
     expect(wrapper.find('[role="status"]').exists()).toBe(false);
-    expect(
-      window.sessionStorage.getItem('push-notification-banner-dismissed-16')
-    ).toBe('true');
   });
 
   it('requests permission and registers browser push when activated', async () => {
@@ -101,5 +98,8 @@ describe('PushNotificationBanner', () => {
 
     expect(Notification.requestPermission).not.toHaveBeenCalled();
     expect(wrapper.find('[role="status"]').exists()).toBe(false);
+    expect(
+      window.localStorage.getItem('push-notification-banner-activated')
+    ).toBe('true');
   });
 });

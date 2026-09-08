@@ -89,7 +89,7 @@ class Conversation < ApplicationRecord
   scope :sort_on_unread, lambda { |_direction|
     order(unread_messages_count_arel.desc).sort_on_last_activity_at('desc')
   }
-  scope :unattended, -> { where(first_reply_created_at: nil).or(where.not(waiting_since: nil)) }
+  scope :unattended, -> { where.not(waiting_since: nil) }
   scope :resolvable_not_waiting, lambda { |auto_resolve_after|
     return none if auto_resolve_after.to_i.zero?
 
@@ -346,7 +346,7 @@ class Conversation < ApplicationRecord
 
   def list_of_keys
     %w[team_id assignee_id assignee_agent_bot_id status snoozed_until custom_attributes label_list waiting_since
-       first_reply_created_at priority]
+       first_reply_created_at priority kanban_stage]
   end
 
   def allowed_keys?

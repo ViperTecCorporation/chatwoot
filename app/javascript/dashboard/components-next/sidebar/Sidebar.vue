@@ -496,6 +496,13 @@ const menuItems = computed(() => {
       ],
     },
     {
+      name: 'Kanban',
+      label: 'Kanban',
+      icon: 'i-lucide-layout-grid',
+      to: accountScopedRoute('kanban_dashboard'),
+      activeOn: ['kanban_dashboard'],
+    },
+    {
       name: 'Contacts',
       label: t('SIDEBAR.CONTACTS'),
       icon: 'i-lucide-contact',

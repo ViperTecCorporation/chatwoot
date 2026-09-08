@@ -8,12 +8,12 @@ import InboxName from '../InboxName.vue';
 import MoreActions from './MoreActions.vue';
 import Avatar from 'next/avatar/Avatar.vue';
 import SLACardLabel from './components/SLACardLabel.vue';
-import ConversationCallButton from './ConversationCallButton.vue';
 import wootConstants from 'dashboard/constants/globals';
 import { conversationListPageURL } from 'dashboard/helper/URLHelper';
 import { snoozedReopenTime } from 'dashboard/helper/snoozeHelpers';
 import { useInbox } from 'dashboard/composables/useInbox';
 import { useI18n } from 'vue-i18n';
+import InternalVoiceCallButton from 'dashboard/components-next/InternalChat/InternalVoiceCallButton.vue';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
 import { useAlert } from 'dashboard/composables';
 
@@ -25,14 +25,6 @@ const props = defineProps({
   showBackButton: {
     type: Boolean,
     default: false,
-  },
-  backListCount: {
-    type: Number,
-    default: 0,
-  },
-  backListLabel: {
-    type: String,
-    default: '',
   },
 });
 
@@ -114,8 +106,9 @@ const hasMultipleInboxes = computed(
   () => store.getters['inboxes/getInboxes'].length > 1
 );
 
-const hasSlaPolicyId = computed(
-  () => props.chat?.applied_sla?.id && !currentContact.value?.blocked
+const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
+const isInternalChat = computed(
+  () => inbox.value?.channel_type === 'Channel::Internal'
 );
 
 const copyConversationId = async () => {
@@ -131,18 +124,15 @@ const copyConversationId = async () => {
 <template>
   <div
     ref="conversationHeader"
-    class="flex flex-row gap-2 items-center justify-between flex-1 w-full min-w-0 px-2 py-2 h-14 sm:flex-col sm:gap-3 sm:px-3 sm:pt-3 sm:pb-2 sm:h-24 xl:flex-row xl:h-12"
+    class="flex flex-col gap-3 items-center justify-between flex-1 w-full min-w-0 xl:flex-row px-3 pt-3 pb-2 h-auto min-h-[6rem] xl:min-h-[4rem]"
   >
     <div
-      class="flex items-center justify-start flex-1 max-w-full min-w-0 sm:w-full sm:flex-none xl:w-auto xl:flex-1"
+      class="flex items-center justify-start w-full xl:w-auto max-w-full min-w-0 xl:flex-1"
     >
       <BackButton
         v-if="showBackButton"
         :back-url="backButtonUrl"
-        :badge-count="backListCount"
-        :accessible-label="backListLabel"
-        mobile-icon-only
-        class="ltr:mr-1 rtl:ml-1"
+        class="ltr:mr-2 rtl:ml-2"
       />
       <Avatar
         :name="conversationTitle"
@@ -150,6 +140,7 @@ const copyConversationId = async () => {
         :size="32"
         :status="currentContact.availability_status"
         hide-offline-status
+        rounded-full
       />
       <div
         class="flex flex-col items-start min-w-0 ml-2 overflow-hidden rtl:ml-0 rtl:mr-2"
@@ -170,18 +161,15 @@ const copyConversationId = async () => {
         </div>
 
         <div
-          class="flex items-center gap-1 overflow-hidden text-xs conversation--header--actions text-n-slate-11 text-ellipsis whitespace-nowrap"
+          v-if="currentContact.phone_number"
+          class="text-xs leading-tight text-n-slate-11"
         >
-          <button
-            type="button"
-            class="truncate text-label-small text-n-slate-11 hover:text-n-slate-12 !p-0 cursor-pointer"
-            @click="copyConversationId"
-          >
-            {{ `#${chat.id}` }}
-          </button>
-          <span v-if="hasMultipleInboxes">•</span>
-          <InboxName v-if="hasMultipleInboxes" :inbox="inbox" class="!mx-0" />
-          <span v-if="chat.group && chat.group_contacts_count">•</span>
+          {{ currentContact.phone_number }}
+        </div>
+        <InboxName :inbox="inbox" class="mt-0.5" />
+        <div
+          class="flex items-center gap-2 mt-0.5 overflow-hidden text-xs conversation--header--actions text-n-slate-11 text-ellipsis whitespace-nowrap"
+        >
           <span v-if="chat.group && chat.group_contacts_count">
             {{ chat.group_contacts_count }}
             {{ t('CONVERSATION.GROUP.MEMBERS') }}
@@ -194,8 +182,15 @@ const copyConversationId = async () => {
       </div>
     </div>
     <div
-      class="flex flex-row items-center justify-end flex-shrink-0 gap-1 w-auto header-actions-wrap sm:w-full sm:justify-start sm:gap-2 xl:w-auto xl:justify-end"
+      class="flex flex-row items-center justify-start xl:justify-end flex-shrink-0 gap-2 w-full xl:w-auto header-actions-wrap"
     >
+      <button
+        type="button"
+        class="truncate text-label-small text-n-slate-11 hover:text-n-slate-12 !p-0 cursor-pointer"
+        @click="copyConversationId"
+      >
+        {{ `#${chat.id}` }}
+      </button>
       <SLACardLabel
         v-if="hasSlaPolicyId"
         :chat="chat"
@@ -203,7 +198,10 @@ const copyConversationId = async () => {
         :parent-width="width"
         class="hidden md:flex"
       />
-      <ConversationCallButton :inbox="inbox" :chat="currentChat" />
+      <InternalVoiceCallButton
+        v-if="isInternalChat"
+        :conversation="currentChat"
+      />
       <MoreActions :conversation-id="currentChat.id" />
     </div>
   </div>

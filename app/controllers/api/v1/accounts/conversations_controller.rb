@@ -113,34 +113,63 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
   end
 
   def update_last_seen
-    # High-traffic accounts generate excessive DB writes when agents frequently switch between conversations.
-    # Throttle last_seen updates to once per hour when there are no unread messages to reduce DB load.
-    # Always update immediately if there are unread messages to maintain accurate read/unread state.
-    # Visiting a conversation should clear any unread inbox notifications for this conversation.
-    Notification::MarkConversationReadService.new(user: Current.user, account: Current.account, conversation: @conversation).perform
-    return update_last_seen_on_conversation(DateTime.now.utc, true) if assignee? && @conversation.assignee_unread_messages.any?
-    return update_last_seen_on_conversation(DateTime.now.utc, false) if !assignee? && @conversation.unread_messages.any?
+    # DB update — sempre atualiza se houver unread (sem throttle), ou respeita throttle se não houver
+    if (assignee? && @conversation.assignee_unread_messages.any?) ||
+       (!assignee? && @conversation.unread_messages.any?)
+      update_last_seen_on_conversation(DateTime.now.utc, assignee?)
+    elsif should_update_last_seen?
+      update_last_seen_on_conversation(DateTime.now.utc, assignee?)
+    end
 
-    # No unread messages - apply throttling to limit DB writes
-    return unless should_update_last_seen?
+    # Marca notificações como lidas (rescue próprio — só DB, nunca falha por Redis)
+    ::Notification::MarkConversationReadService.new(
+      user: Current.user, account: Current.account, conversation: @conversation
+    ).perform
 
-    update_last_seen_on_conversation(DateTime.now.utc, assignee?)
+    render json: { id: @conversation.display_id, agent_last_seen_at: @conversation.agent_last_seen_at.to_i }
+  rescue StandardError => e
+    Rails.logger.warn "[update_last_seen] Non-critical error: #{e.message}"
+    render json: { id: @conversation.display_id, agent_last_seen_at: @conversation.agent_last_seen_at.to_i }
+  ensure
+    # Notifier em rescue isolado — Redis pode falhar, não afeta a response
+    begin
+      ::Conversations::UnreadCounts::Notifier.new(@conversation).perform
+    rescue StandardError => e
+      Rails.logger.warn "[update_last_seen] Notifier error (non-critical): #{e.message}"
+    end
   end
 
   def unread
     last_incoming_message = @conversation.messages.incoming.last
     last_seen_at = last_incoming_message.created_at - 1.second if last_incoming_message.present?
-    update_last_seen_on_conversation(last_seen_at, true)
-  end
 
-  def custom_attributes
+    update_last_seen_on_conversation(last_seen_at, true)
+
+    # Re-open the user's notification for this conversation (mark it unread)
+    notification = current_user.notifications.where(account_id: current_account.id, primary_actor: @conversation, read_at: nil).last
+    if notification
+      notification.update(read_at: nil)
+    else
+      last_message = @conversation.messages.incoming.last
+      if last_message
+        NotificationBuilder.new(
+          notification_type: 'assigned_conversation_new_message',
+          user: current_user,
+          account: current_account,
+          primary_actor: @conversation,
+          secondary_actor: last_message
+        ).perform
+      end
+    end
+  end
+def custom_attributes
     @conversation.custom_attributes = params.permit(custom_attributes: {})[:custom_attributes]
     @conversation.save!
   end
 
   def destroy
     authorize @conversation, :destroy?
-    ::Conversations::DeleteService.new(conversation: @conversation, user: Current.user, ip: request.ip).perform
+    ::DeleteObjectJob.perform_later(@conversation, Current.user, request.ip)
     head :ok
   end
 
@@ -148,7 +177,7 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
 
   def permitted_update_params
     # TODO: Move the other conversation attributes to this method and remove specific endpoints for each attribute
-    params.permit(:priority)
+    params.permit(:priority, :kanban_stage)
   end
 
   def attachment_params
@@ -163,9 +192,8 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     @conversation.update_columns(updates)
     # rubocop:enable Rails/SkipsModelValidations
 
-    UpdateLastSeenJob.perform_later(@conversation.id, Current.user, last_seen_at) if last_seen_at.present?
-    ::Conversations::UnreadCounts::Notifier.new(@conversation).perform
-    ::Conversations::UnreadCounts::FilteredCountInvalidator.new(Current.account).conversation_changed!
+    # Sync in-memory attributes so subsequent logic reads the updated values
+    updates.each { |attr, value| @conversation[attr] = value }
   end
 
   def should_update_last_seen?
@@ -191,7 +219,7 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
 
   def conversation
     @conversation ||= Current.account.conversations.find_by!(display_id: params[:id])
-    authorize @conversation, :show?
+    authorize @conversation, :update?
   end
 
   def inbox

@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 import { requestPushPermissions } from 'dashboard/helper/pushHelper';
-import SessionStorage from 'shared/helpers/sessionStorage';
 
 const props = defineProps({
   accountId: {
@@ -19,9 +18,7 @@ const isCheckingPushState = ref(true);
 const isDismissed = ref(false);
 const isActivating = ref(false);
 
-const dismissalKey = computed(
-  () => `push-notification-banner-dismissed-${props.accountId || 'global'}`
-);
+const activatedKey = 'push-notification-banner-activated';
 
 const isPushSupported = computed(
   () =>
@@ -66,7 +63,6 @@ const syncPushState = async () => {
 
 const dismiss = () => {
   isDismissed.value = true;
-  SessionStorage.set(dismissalKey.value, true);
 };
 
 const activate = async () => {
@@ -91,6 +87,12 @@ const activate = async () => {
     onSuccess: () => {
       isActivating.value = false;
       hasPushSubscription.value = true;
+      isDismissed.value = true;
+      try {
+        localStorage.setItem(activatedKey, 'true');
+      } catch {
+        // ignore
+      }
     },
     onError: () => {
       isActivating.value = false;
@@ -99,7 +101,13 @@ const activate = async () => {
 };
 
 onMounted(() => {
-  isDismissed.value = Boolean(SessionStorage.get(dismissalKey.value));
+  try {
+    if (localStorage.getItem(activatedKey) === 'true') {
+      isDismissed.value = true;
+    }
+  } catch {
+    // ignore
+  }
   syncPushState();
   window.addEventListener('focus', syncPushState);
 });

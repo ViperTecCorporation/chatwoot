@@ -14,6 +14,7 @@ import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import ConversationFilter from 'next/filter/ConversationFilter.vue';
 import SaveCustomView from 'next/filter/SaveCustomView.vue';
 import ChatTypeTabs from './widgets/ChatTypeTabs.vue';
+import HorizontalTabs from './widgets/HorizontalTabs.vue';
 import DeleteCustomViews from 'dashboard/routes/dashboard/customviews/DeleteCustomViews.vue';
 import ConversationBulkActions from './widgets/conversation/conversationBulkActions/Index.vue';
 import TeleportWithDirection from 'dashboard/components-next/TeleportWithDirection.vue';
@@ -78,6 +79,9 @@ const store = useStore();
 
 const resolveAttributesModalRef = ref(null);
 
+const conversationLayout = ref(
+  uiSettings.value.conversation_layout_type || wootConstants.LAYOUT_TYPES.CONDENSED
+);
 const activeAssigneeTab = ref(wootConstants.ASSIGNEE_TYPE.ME);
 const activeStatus = ref(wootConstants.STATUS_TYPE.OPEN);
 const activeSortBy = ref(wootConstants.SORT_BY_TYPE.LAST_ACTIVITY_AT_DESC);
@@ -103,6 +107,8 @@ const allChatList = useMapGetter('getAllStatusChats');
 const unAssignedChatsList = useMapGetter('getUnAssignedChats');
 const groupChatsList = useMapGetter('getGroupChats');
 const participatingChatsList = useMapGetter('getParticipatingChats');
+const mentionsChatsList = useMapGetter('getMentionedChats');
+const waitingChatsList = useMapGetter('getWaitingChats');
 const chatListLoading = useMapGetter('getChatListLoadingStatus');
 const activeInbox = useMapGetter('getSelectedInbox');
 const conversationStats = useMapGetter('conversationStats/getStats');
@@ -436,11 +442,16 @@ const conversationList = computed(() => {
   if (!hasAppliedFiltersOrActiveFolders.value) {
     const filters = conversationFilters.value;
     if (
-      props.conversationType === wootConstants.CONVERSATION_TYPE.PARTICIPATING
+      props.conversationType === wootConstants.CONVERSATION_TYPE.PARTICIPATING ||
+      activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.PARTICIPATING
     ) {
       localConversationList = filterByAssigneeTab(
         participatingChatsList.value(filters)
       );
+    } else if (
+      activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.MENTION
+    ) {
+      localConversationList = [...mentionsChatsList.value(filters)];
     } else if (activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.ME) {
       localConversationList = [...mineChatsList.value(filters)];
     } else if (
@@ -452,7 +463,7 @@ const conversationList = computed(() => {
     } else if (
       activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.WAITING
     ) {
-      localConversationList = [...allChatList.value(filters)];
+      localConversationList = [...waitingChatsList.value(filters)];
     } else if (
       activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.INTERNAL
     ) {
@@ -505,7 +516,15 @@ const uniqueInboxes = computed(() => {
   return [...new Set(selectedInboxes.value)];
 });
 
+const isHorizontalLayout = computed(() => {
+  return conversationLayout.value === wootConstants.LAYOUT_TYPES.HORIZONTAL_TOP;
+});
+
 // ---------------------- Methods -----------------------
+function toggleLayout(newLayout) {
+  conversationLayout.value = newLayout;
+}
+
 function setFiltersFromUISettings() {
   const { conversations_filter_by: filterBy = {} } = uiSettings.value;
   const { status, order_by: orderBy } = filterBy;
@@ -1038,11 +1057,13 @@ watch(conversationFilters, (newVal, oldVal) => {
       :is-on-expanded-layout="isOnExpandedLayout"
       :conversation-stats="conversationStats"
       :is-list-loading="chatListLoading && !conversationList.length"
+      :conversation-layout="conversationLayout"
       @add-folders="onClickOpenAddFoldersModal"
       @delete-folders="onClickOpenDeleteFoldersModal"
       @filters-modal="onToggleAdvanceFiltersModal"
       @reset-filters="resetAndFetchData"
       @basic-filter-change="onBasicFilterChange"
+      @toggle-layout="toggleLayout"
     />
 
     <TeleportWithDirection
@@ -1067,10 +1088,17 @@ watch(conversationFilters, (newVal, oldVal) => {
     />
 
     <ChatTypeTabs
-      v-if="!hasAppliedFiltersOrActiveFolders"
+      v-if="!hasAppliedFiltersOrActiveFolders && !isHorizontalLayout"
       :items="assigneeTabItems"
       :active-tab="activeAssigneeTab"
       is-compact
+      @chat-tab-change="updateAssigneeTab"
+    />
+
+    <HorizontalTabs
+      v-if="!hasAppliedFiltersOrActiveFolders && isHorizontalLayout"
+      :items="assigneeTabItems"
+      :active-tab="activeAssigneeTab"
       @chat-tab-change="updateAssigneeTab"
     />
 

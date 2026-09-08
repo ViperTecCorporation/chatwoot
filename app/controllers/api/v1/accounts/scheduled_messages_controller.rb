@@ -15,7 +15,7 @@ class Api::V1::Accounts::ScheduledMessagesController < Api::V1::Accounts::BaseCo
     ensure_sender_allowed!(sender)
     scheduled_message = build_scheduled_message(conversation, sender)
     scheduled_message.transaction do
-      build_items(scheduled_message)
+      build_items(scheduled_message) unless scheduled_message.is_task?
       scheduled_message.save!
       attach_item_files!(scheduled_message)
     end
@@ -37,11 +37,6 @@ class Api::V1::Accounts::ScheduledMessagesController < Api::V1::Accounts::BaseCo
 
   def destroy
     authorize_owner_or_admin!
-    unless @scheduled_message.scheduled? || @scheduled_message.failed?
-      return render json: { error: 'Only pending or failed schedules can be cancelled' },
-                    status: :unprocessable_entity
-    end
-
     @scheduled_message.cancelled!
     head :no_content
   end
@@ -53,7 +48,7 @@ class Api::V1::Accounts::ScheduledMessagesController < Api::V1::Accounts::BaseCo
   end
 
   def permitted_params
-    params.require(:scheduled_message).permit(:scheduled_at, :label_id, :reason, :content, :content_type, :sender_id,
+    params.require(:scheduled_message).permit(:scheduled_at, :label_id, :reason, :content, :content_type, :sender_id, :is_task,
                                               content_attributes: {}, attachment_blob_ids: [],
                                               messages: [:content, :content_type, :voice_message,
                                                          { content_attributes: {}, attachment_blob_ids: [] }])
@@ -96,6 +91,8 @@ class Api::V1::Accounts::ScheduledMessagesController < Api::V1::Accounts::BaseCo
   end
 
   def sync_legacy_fields!(scheduled_message)
+    return if scheduled_message.is_task?
+
     first_item = scheduled_message.items.first
     return unless first_item
 
@@ -125,20 +122,24 @@ class Api::V1::Accounts::ScheduledMessagesController < Api::V1::Accounts::BaseCo
   end
 
   def build_scheduled_message(conversation, sender)
-    current_account.scheduled_messages.new(
-      schedule_attributes.merge(
-        scheduled_at: account_time_zone.parse(permitted_params[:scheduled_at]),
-        conversation: conversation,
-        contact: conversation.contact,
-        inbox: conversation.inbox,
-        created_by: current_user,
-        sender: sender
-      )
+    attrs = schedule_attributes.merge(
+      scheduled_at: account_time_zone.parse(permitted_params[:scheduled_at]),
+      conversation: conversation,
+      contact: conversation.contact,
+      inbox: conversation.inbox,
+      created_by: current_user,
+      sender: sender
     )
+    if attrs[:is_task]
+      task_text = extract_task_text
+      attrs[:reason] = task_text if task_text.present? && attrs[:reason].blank?
+      attrs[:content] = task_text if task_text.present? && attrs[:content].blank?
+    end
+    current_account.scheduled_messages.new(attrs)
   end
 
   def editable?
-    @scheduled_message.scheduled? || @scheduled_message.failed?
+    !@scheduled_message.sending?
   end
 
   def render_uneditable
@@ -152,7 +153,19 @@ class Api::V1::Accounts::ScheduledMessagesController < Api::V1::Accounts::BaseCo
       attributes[:status] = :scheduled
       attributes[:error_message] = nil
     end
+    if attributes[:is_task]
+      task_text = extract_task_text
+      attributes[:reason] = task_text if task_text.present?
+      attributes[:content] = task_text if task_text.present?
+    end
     attributes
+  end
+
+  def extract_task_text
+    message = permitted_messages&.first
+    return message[:content] if message&.dig(:content).present?
+
+    permitted_params[:content]
   end
 
   def replace_items!

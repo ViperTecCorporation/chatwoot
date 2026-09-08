@@ -68,7 +68,7 @@ class WebhookListener < BaseListener
 
   def inbox_created(event)
     inbox, account = extract_inbox_and_account(event)
-    inbox_webhook_data = Inbox::EventDataPresenter.new(inbox).webhook_data
+    inbox_webhook_data = Inbox::EventDataPresenter.new(inbox).push_data
     payload = inbox_webhook_data.merge(event: __method__.to_s)
     deliver_account_webhooks(payload, account)
   end
@@ -78,7 +78,7 @@ class WebhookListener < BaseListener
     changed_attributes = extract_changed_attributes(event)
     return if changed_attributes.blank?
 
-    inbox_webhook_data = Inbox::EventDataPresenter.new(inbox).webhook_data
+    inbox_webhook_data = Inbox::EventDataPresenter.new(inbox).push_data
     payload = inbox_webhook_data.merge(event: __method__.to_s, changed_attributes: changed_attributes)
     deliver_account_webhooks(payload, account)
   end
@@ -107,15 +107,17 @@ class WebhookListener < BaseListener
     deliver_webhook_payloads(payload, inbox)
   end
 
-  def deliver_account_webhooks(payload, account)
-    return unless account.api_and_webhooks_enabled?
+  def deliver_account_webhooks(payload, account, inbox = nil)
+    webhooks = if inbox
+                 account.webhooks.where(webhook_type: :account_type).or(account.webhooks.where(webhook_type: :inbox_type, inbox_id: inbox.id))
+               else
+                 account.webhooks.account_type
+               end
 
-    account.webhooks.account_type.each do |webhook|
+    webhooks.each do |webhook|
       next unless webhook.subscriptions.include?(payload[:event])
 
-      WebhookJob.perform_later(webhook.url, payload, :account_webhook,
-                               secret: webhook.secret,
-                               delivery_id: SecureRandom.uuid)
+      WebhookJob.perform_later(webhook.url, payload, :account_webhook)
     end
   end
 
@@ -123,8 +125,7 @@ class WebhookListener < BaseListener
     return unless inbox.channel_type == 'Channel::Api'
     return if inbox.channel.webhook_url.blank?
 
-    WebhookJob.perform_later(inbox.channel.webhook_url, payload, :api_inbox_webhook,
-                             secret: inbox.channel.secret, delivery_id: SecureRandom.uuid)
+    WebhookJob.perform_later(inbox.channel.webhook_url, payload, :api_inbox_webhook)
   end
 
   def deliver_whatsapp_inbox_webhooks(payload, inbox)
@@ -139,7 +140,7 @@ class WebhookListener < BaseListener
   end
 
   def deliver_webhook_payloads(payload, inbox)
-    deliver_account_webhooks(payload, inbox.account)
+    deliver_account_webhooks(payload, inbox.account, inbox)
     deliver_api_inbox_webhooks(payload, inbox)
     deliver_whatsapp_inbox_webhooks(payload, inbox)
   end

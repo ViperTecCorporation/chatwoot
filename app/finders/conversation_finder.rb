@@ -240,7 +240,7 @@ class ConversationFinder
 
     return legacy_count_for_all_conversations(count_scope, internal_scope, waiting_scope) if count_scope.limit_value || count_scope.offset_value || count_scope.eager_loading?
 
-    waiting_filter = '"conversations"."group" = FALSE AND (first_reply_created_at IS NULL OR waiting_since IS NOT NULL)'
+    waiting_filter = '"conversations"."group" = FALSE AND waiting_since IS NOT NULL'
     waiting_filter = "#{waiting_filter} AND (assignee_id = #{current_user.id} OR assignee_id IS NULL)" unless @is_admin
 
     assigned_filter = if @team

@@ -5,8 +5,8 @@ import { formatNumber } from '@chatwoot/utils';
 import wootConstants from 'dashboard/constants/globals';
 
 import ConversationBasicFilter from './widgets/conversation/ConversationBasicFilter.vue';
-import SwitchLayout from 'dashboard/routes/dashboard/conversation/search/SwitchLayout.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
+import TaskNotificationsPopover from './TaskNotificationsPopover.vue';
 
 const props = defineProps({
   pageTitle: { type: String, required: true },
@@ -17,6 +17,7 @@ const props = defineProps({
   conversationStats: { type: Object, required: true },
   isListLoading: { type: Boolean, required: true },
   hasHideFiltersForAgents: { type: Boolean, required: true },
+  conversationLayout: { type: String, default: wootConstants.LAYOUT_TYPES.CONDENSED },
 });
 
 const emit = defineEmits([
@@ -25,6 +26,7 @@ const emit = defineEmits([
   'resetFilters',
   'basicFilterChange',
   'filtersModal',
+  'toggleLayout',
 ]);
 
 const { uiSettings, updateUISettings } = useUISettings();
@@ -40,20 +42,31 @@ const hasAppliedFiltersOrActiveFolders = computed(() => {
 const allCount = computed(() => props.conversationStats?.allCount || 0);
 const formattedAllCount = computed(() => formatNumber(allCount.value));
 
+const isHorizontalLayout = computed(() => {
+  return props.conversationLayout === wootConstants.LAYOUT_TYPES.HORIZONTAL_TOP;
+});
+
 const toggleConversationLayout = () => {
-  const { LAYOUT_TYPES } = wootConstants;
-  const {
-    conversation_display_type: conversationDisplayType = LAYOUT_TYPES.CONDENSED,
-  } = uiSettings.value;
-  const newViewType =
-    conversationDisplayType === LAYOUT_TYPES.CONDENSED
-      ? LAYOUT_TYPES.EXPANDED
-      : LAYOUT_TYPES.CONDENSED;
+  const newLayout = isHorizontalLayout.value
+    ? wootConstants.LAYOUT_TYPES.CONDENSED
+    : wootConstants.LAYOUT_TYPES.HORIZONTAL_TOP;
   updateUISettings({
-    conversation_display_type: newViewType,
-    previously_used_conversation_display_type: newViewType,
+    conversation_layout_type: newLayout,
   });
+  emit('toggleLayout', newLayout);
 };
+
+const layoutIcon = computed(() => {
+  return isHorizontalLayout.value
+    ? 'i-lucide-panel-top'
+    : 'i-lucide-panel-top';
+});
+
+const layoutTooltip = computed(() => {
+  return isHorizontalLayout.value
+    ? 'Layout Lateral (Tradicional)'
+    : 'Layout Horizontal Superior';
+});
 </script>
 
 <template>
@@ -87,6 +100,7 @@ const toggleConversationLayout = () => {
       </span>
     </div>
     <div v-if="!hasHideFiltersForAgents" class="flex items-center gap-1">
+      <TaskNotificationsPopover />
       <template v-if="hasAppliedFilters && !hasActiveFolders">
         <div class="relative">
           <NextButton
@@ -160,10 +174,32 @@ const toggleConversationLayout = () => {
         :is-on-expanded-layout="isOnExpandedLayout"
         @change-filter="onBasicFilterChange"
       />
-      <SwitchLayout
-        :is-on-expanded-layout="isOnExpandedLayout"
-        @toggle="toggleConversationLayout"
-      />
+      <button
+        v-tooltip.left="layoutTooltip"
+        class="flex items-center justify-center w-6 h-6 rounded-md transition-colors duration-150"
+        :class="
+          isHorizontalLayout
+            ? 'bg-n-brand-9 text-white'
+            : 'text-n-slate-11 hover:bg-n-slate-3 hover:text-n-slate-12'
+        "
+        @click="toggleConversationLayout"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+          <line x1="3" x2="21" y1="9" y2="9" />
+          <line x1="9" x2="9" y1="21" y2="9" />
+        </svg>
+      </button>
     </div>
   </div>
 </template>

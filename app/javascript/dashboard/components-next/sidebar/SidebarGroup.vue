@@ -55,9 +55,6 @@ const hasChildren = computed(
 const isPopoverOpen = computed(() => activePopover.value === props.name);
 const triggerRef = ref(null);
 const triggerRect = ref({ top: 0, left: 0, bottom: 0, right: 0 });
-// The sort dropdown teleports outside the popover; keep the popover open while
-// it is showing so moving the cursor onto it does not close everything.
-const isSortMenuOpen = ref(false);
 
 const openPopover = () => {
   if (triggerRef.value) {
@@ -85,7 +82,7 @@ const handleMouseEnter = () => {
 };
 
 const handleMouseLeave = () => {
-  if (!hasChildren.value || isSortMenuOpen.value) return;
+  if (!hasChildren.value) return;
   scheduleClose(200);
 };
 
@@ -94,13 +91,7 @@ const handlePopoverMouseEnter = () => {
 };
 
 const handlePopoverMouseLeave = () => {
-  if (isSortMenuOpen.value) return;
   scheduleClose(100);
-};
-
-const handleSortToggle = isOpen => {
-  isSortMenuOpen.value = isOpen;
-  cancelClose();
 };
 
 // Close popover when mouse leaves the window
@@ -108,38 +99,19 @@ const handleWindowBlur = () => {
   closeActivePopover();
 };
 
-const hasAccessibleSubChildren = child => {
-  return child.children?.some(
-    subChild => subChild.to && isAllowed(subChild.to)
-  );
-};
-
-const visibleChildren = computed(() => {
+const accessibleItems = computed(() => {
   if (!hasChildren.value) return [];
-
   return props.children.filter(child => {
-    if (child.children) return hasAccessibleSubChildren(child);
-
+    // If a item has no link, it means it's just a subgroup header
+    // So we don't need to check for permissions here, because there's nothing to
+    // access here anyway
     return child.to && isAllowed(child.to);
   });
 });
 
-const accessibleItems = computed(() => {
-  if (!hasChildren.value) return [];
-
-  return visibleChildren.value
-    .flatMap(child => child.children || child)
-    .filter(child => child.to && isAllowed(child.to));
-});
-
 const hasAccessibleChildren = computed(() => {
-  return visibleChildren.value.length > 0;
+  return accessibleItems.value.length > 0;
 });
-
-const isLastVisibleChild = child => {
-  const lastChild = visibleChildren.value[visibleChildren.value.length - 1];
-  return lastChild === child;
-};
 
 const isActive = computed(() => {
   if (props.to) {
@@ -205,15 +177,6 @@ const handleCollapsedClick = () => {
 };
 
 const toggleTrigger = () => {
-  if (
-    hasAccessibleChildren.value &&
-    !isExpanded.value &&
-    !hasActiveChild.value
-  ) {
-    // if not already expanded, navigate to the first child
-    const firstItem = accessibleItems.value[0];
-    router.push(firstItem.to);
-  }
   setExpandedItem(props.name);
 };
 
@@ -282,7 +245,6 @@ watch(
           @close="closePopover"
           @mouseenter="handlePopoverMouseEnter"
           @mouseleave="handlePopoverMouseLeave"
-          @sort-toggle="handleSortToggle"
         />
       </div>
     </template>
@@ -303,23 +265,16 @@ watch(
       <ul
         v-if="hasChildren"
         v-show="isExpanded || hasActiveChild"
-        class="grid m-0 list-none min-w-0"
+        class="grid m-0 list-none sidebar-group-children min-w-0"
       >
-        <template v-for="child in visibleChildren" :key="child.name">
+        <template v-for="child in children" :key="child.name">
           <SidebarSubGroup
             v-if="child.children"
-            :name="`${name}:${child.name}`"
             :label="child.label"
             :icon="child.icon"
             :children="child.children"
-            :collapsible="child.collapsible"
-            :show-tree-line="child.showTreeLine"
-            :end-tree-line="child.showTreeLine && isLastVisibleChild(child)"
             :is-expanded="isExpanded"
             :active-child="activeChild"
-            :sort-options="child.sortOptions"
-            :active-sort="child.activeSort"
-            @update-sort="child.onSortChange"
           />
           <SidebarGroupLeaf
             v-else-if="isAllowed(child.to)"
@@ -335,3 +290,60 @@ watch(
     </template>
   </Policy>
 </template>
+
+<style>
+.sidebar-group-children .child-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0.125rem;
+  height: 100%;
+}
+
+.sidebar-group-children .child-item:first-child::before {
+  border-radius: 4px 4px 0 0;
+}
+
+/* This selects the last child in a group */
+/* https://codepen.io/scmmishra/pen/yLmKNLW */
+.sidebar-group-children > .child-item:last-child::before,
+.sidebar-group-children
+  > *:last-child
+  > *:last-child
+  > .child-item:last-child::before {
+  height: 20%;
+}
+
+.sidebar-group-children > .child-item:last-child::after,
+.sidebar-group-children
+  > *:last-child
+  > *:last-child
+  > .child-item:last-child::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 12px;
+  bottom: calc(50% - 2px);
+  border-bottom-width: 0.125rem;
+  border-left-width: 0.125rem;
+  border-right-width: 0px;
+  border-top-width: 0px;
+  border-radius: 0 0 0 4px;
+  left: 0;
+}
+
+#app[dir='rtl'] .sidebar-group-children > .child-item:last-child::after,
+#app[dir='rtl']
+  .sidebar-group-children
+  > *:last-child
+  > *:last-child
+  > .child-item:last-child::after {
+  right: 0;
+  border-bottom-width: 0.125rem;
+  border-right-width: 0.125rem;
+  border-left-width: 0px;
+  border-top-width: 0px;
+  border-radius: 0 0 4px 0px;
+}
+</style>

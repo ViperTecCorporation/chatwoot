@@ -221,14 +221,14 @@ describe('#filterByLabel', () => {
 });
 
 describe('#filterByUnattended', () => {
-  it('returns true if conversation type is unattended and has no first reply', () => {
-    expect(filterByUnattended(true, 'unattended', undefined)).toEqual(true);
+  it('returns false if conversation type is unattended and has no waiting_since', () => {
+    expect(filterByUnattended(true, 'unattended', undefined, undefined)).toEqual(false);
   });
-  it('returns false if conversation type is not unattended and has no first reply', () => {
-    expect(filterByUnattended(false, 'mentions', undefined)).toEqual(false);
+  it('returns true if conversation type is unattended and has waiting_since set', () => {
+    expect(filterByUnattended(true, 'unattended', undefined, Date.now())).toEqual(true);
   });
-  it('returns true if conversation type is unattended and has first reply', () => {
-    expect(filterByUnattended(true, 'mentions', 123)).toEqual(true);
+  it('returns false if conversation type is not unattended', () => {
+    expect(filterByUnattended(false, 'mentions', undefined, undefined)).toEqual(false);
   });
 });
 

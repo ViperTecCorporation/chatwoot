@@ -10,7 +10,7 @@ const props = defineProps({
   item: { type: Object, required: true },
 });
 
-const emit = defineEmits(['edit', 'delete', 'retry', 'open']);
+const emit = defineEmits(['edit', 'delete', 'retry', 'open', 'complete']);
 
 const showMenu = ref(false);
 
@@ -22,11 +22,17 @@ const statusConfig = {
   cancelled: { label: 'Cancelado', className: 'text-n-slate-11 bg-n-alpha-2' },
 };
 
-const status = computed(
-  () => statusConfig[props.item.status] || statusConfig.scheduled
-);
+const status = computed(() => {
+  if (props.item.is_task) {
+    return { label: 'Tarefa', className: 'text-n-violet-11 bg-n-violet-3' };
+  }
+  return statusConfig[props.item.status] || statusConfig.scheduled;
+});
 
 const preview = computed(() => {
+  if (props.item.is_task) {
+    return props.item.reason || props.item.content || 'Tarefa';
+  }
   const messages = props.item.messages || [];
   if (messages.length > 1) {
     return messages
@@ -53,10 +59,7 @@ const menuItems = computed(() => {
     },
   ];
 
-  if (
-    !props.item.can_manage ||
-    ['sent', 'cancelled'].includes(props.item.status)
-  ) {
+  if (!props.item.can_manage) {
     return items;
   }
 
@@ -65,6 +68,14 @@ const menuItems = computed(() => {
     action: 'edit',
     icon: 'i-lucide-pencil',
   });
+
+  if (props.item.is_task && props.item.status !== 'cancelled') {
+    items.push({
+      label: 'Concluir',
+      action: 'complete',
+      icon: 'i-lucide-check-circle',
+    });
+  }
 
   if (props.item.status === 'failed') {
     items.push({
@@ -88,6 +99,7 @@ const handleAction = ({ action }) => {
   if (action === 'delete') emit('delete', props.item);
   if (action === 'retry') emit('retry', props.item);
   if (action === 'open') emit('open', props.item);
+  if (action === 'complete') emit('complete', props.item);
 };
 </script>
 
@@ -134,7 +146,7 @@ const handleAction = ({ action }) => {
     </p>
 
     <div
-      v-if="item.reason"
+      v-if="item.reason && !item.is_task"
       class="flex gap-2 p-2 text-xs rounded-lg bg-n-alpha-2 text-n-slate-11"
     >
       <Icon icon="i-lucide-notebook-pen" class="mt-0.5 size-3.5 shrink-0" />
@@ -152,10 +164,11 @@ const handleAction = ({ action }) => {
     <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
       <div class="flex items-center min-w-0 gap-1.5 text-xs text-n-slate-11">
         <span
+          v-if="item.label"
           class="rounded-sm size-2 shrink-0"
           :style="{ backgroundColor: item.label.color }"
         />
-        <span class="truncate">{{ item.label.title }}</span>
+        <span class="truncate">{{ item.label?.title || 'Sem etiqueta' }}</span>
         <Icon icon="i-lucide-user-round" class="size-3.5 shrink-0" />
         <span class="truncate">{{ item.sender.name }}</span>
         <span
