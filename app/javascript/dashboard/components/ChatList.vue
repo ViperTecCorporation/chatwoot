@@ -9,7 +9,6 @@ import {
 
 import ChatListHeader from './ChatListHeader.vue';
 import ConversationList from './ConversationList.vue';
-import PushNotificationBanner from './PushNotificationBanner.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import ConversationFilter from 'next/filter/ConversationFilter.vue';
 import SaveCustomView from 'next/filter/SaveCustomView.vue';
@@ -1101,8 +1100,6 @@ watch(conversationFilters, (newVal, oldVal) => {
       :active-tab="activeAssigneeTab"
       @chat-tab-change="updateAssigneeTab"
     />
-
-    <PushNotificationBanner :account-id="currentAccountId" />
 
     <p
       v-if="!chatListLoading && !conversationList.length"
