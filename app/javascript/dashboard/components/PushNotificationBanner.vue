@@ -18,7 +18,7 @@ const isCheckingPushState = ref(true);
 const isDismissed = ref(false);
 const isActivating = ref(false);
 
-const dismissalKey = 'push-notification-banner-dismissed';
+const activatedKey = 'push-notification-banner-activated';
 
 const isPushSupported = computed(
   () =>
@@ -63,11 +63,6 @@ const syncPushState = async () => {
 
 const dismiss = () => {
   isDismissed.value = true;
-  try {
-    localStorage.setItem(dismissalKey.value, 'true');
-  } catch {
-    // ignore
-  }
 };
 
 const activate = async () => {
@@ -92,6 +87,12 @@ const activate = async () => {
     onSuccess: () => {
       isActivating.value = false;
       hasPushSubscription.value = true;
+      isDismissed.value = true;
+      try {
+        localStorage.setItem(activatedKey, 'true');
+      } catch {
+        // ignore
+      }
     },
     onError: () => {
       isActivating.value = false;
@@ -101,9 +102,11 @@ const activate = async () => {
 
 onMounted(() => {
   try {
-    isDismissed.value = localStorage.getItem(dismissalKey.value) === 'true';
+    if (localStorage.getItem(activatedKey) === 'true') {
+      isDismissed.value = true;
+    }
   } catch {
-    isDismissed.value = false;
+    // ignore
   }
   syncPushState();
   window.addEventListener('focus', syncPushState);
