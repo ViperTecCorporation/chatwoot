@@ -18,9 +18,7 @@ const isCheckingPushState = ref(true);
 const isDismissed = ref(false);
 const isActivating = ref(false);
 
-const dismissalKey = computed(
-  () => `push-notification-banner-dismissed-${props.accountId || 'global'}`
-);
+const dismissalKey = 'push-notification-banner-dismissed';
 
 const isPushSupported = computed(
   () =>
