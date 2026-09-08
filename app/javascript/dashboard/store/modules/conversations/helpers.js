@@ -86,11 +86,11 @@ export const filterByLabel = (shouldFilter, labels, chatLabels) => {
 export const filterByUnattended = (
   shouldFilter,
   conversationType,
-  firstReplyOn,
+  _firstReplyOn,
   waitingSince
 ) => {
   return conversationType === 'unattended'
-    ? (!firstReplyOn || !!waitingSince) && shouldFilter
+    ? !!waitingSince && shouldFilter
     : shouldFilter;
 };
 
