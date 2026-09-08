@@ -108,6 +108,7 @@ const unAssignedChatsList = useMapGetter('getUnAssignedChats');
 const groupChatsList = useMapGetter('getGroupChats');
 const participatingChatsList = useMapGetter('getParticipatingChats');
 const mentionsChatsList = useMapGetter('getMentionedChats');
+const waitingChatsList = useMapGetter('getWaitingChats');
 const chatListLoading = useMapGetter('getChatListLoadingStatus');
 const activeInbox = useMapGetter('getSelectedInbox');
 const conversationStats = useMapGetter('conversationStats/getStats');
@@ -462,7 +463,7 @@ const conversationList = computed(() => {
     } else if (
       activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.WAITING
     ) {
-      localConversationList = [...allChatList.value(filters)];
+      localConversationList = [...waitingChatsList.value(filters)];
     } else if (
       activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.INTERNAL
     ) {
